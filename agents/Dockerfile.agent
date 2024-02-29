@@ -1,0 +1,52 @@
+# Use Ubuntu 20.04 LTS as the base image
+FROM ubuntu:20.04
+
+# Avoid interactive prompts from apt during the build
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install system dependencies required for building the MTConnect cppagent
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    git \
+    python3-pip \
+    ruby \
+    autoconf \
+    libxml2-dev \
+    wget \
+    libboost-all-dev \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Conan, a C++ package manager, to manage cppagent dependencies
+RUN pip3 install conan
+
+# Install a newer version of CMake
+RUN wget https://github.com/Kitware/CMake/releases/download/v3.23.3/cmake-3.23.3-linux-x86_64.sh -O /cmake-install.sh \
+    && chmod +x /cmake-install.sh \
+    && /cmake-install.sh --skip-license --prefix=/usr/local \
+    && rm /cmake-install.sh
+
+
+# Clone the MTConnect cppagent repository
+RUN git clone https://github.com/mtconnect/cppagent.git /cppagent
+
+# Set the working directory to the cloned cppagent repository
+WORKDIR /cppagent
+
+# Ensure the default Conan profile is correctly set up
+RUN conan profile detect || conan profile new default --detect
+
+# Use Conan to install all dependencies required by the cppagent
+# --build=missing tells Conan to build dependencies from source if they're not found in the binary repositories
+RUN conan install . --build=missing
+
+# Build the cppagent using CMake
+RUN cmake . -DCMAKE_BUILD_TYPE=Release
+RUN make
+
+# Expose port 5000 for the MTConnect agent
+EXPOSE 5000
+
+# Command to run the MTConnect agent
+# The agent.cfg configuration file needs to be mapped or copied into the container
+CMD ["./agent", "/cppagent/agent.cfg"]

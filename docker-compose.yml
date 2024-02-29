@@ -1,0 +1,102 @@
+version: '3.8'
+
+services:
+  flask-app:
+    build: 
+      context: ./flask_app
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./flask_app:/app
+
+  mtconnect-agent-1:
+    build:
+      context: ./agents
+      dockerfile: Dockerfile.agent
+    volumes:
+      - ./agents/mc1:/cppagent/config
+    ports:
+      - "5001:5000"
+
+  mtconnect-agent-2:
+    build:
+      context: ./agents
+      dockerfile: Dockerfile.agent
+    volumes:
+      - ./agents/mc2:/cppagent/config
+    ports:
+      - "5002:5000"
+
+  mtconnect-agent-3:
+    build:
+      context: ./agents
+      dockerfile: Dockerfile.agent
+    volumes:
+      - ./agents/mc3:/cppagent/config
+    ports:
+      - "5003:5000"
+
+  mtconnect-agent-4:
+    build:
+      context: ./agents
+      dockerfile: Dockerfile.agent
+    volumes:
+      - ./agents/mc4:/cppagent/config
+    ports:
+      - "5004:5000"
+
+  mtconnect-agent-5:
+    build:
+      context: ./agents
+      dockerfile: Dockerfile.agent
+    volumes:
+      - ./agents/mc5:/cppagent/config
+    ports:
+      - "5005:5000"
+
+  mtconnect-agent-6:
+    build:
+      context: ./agents
+      dockerfile: Dockerfile.agent
+    volumes:
+      - ./agents/mc6:/cppagent/config
+    ports:
+      - "5006:5000"
+  
+  mtconnect-agent-7:
+    build:
+      context: ./agents
+      dockerfile: Dockerfile.agent
+    volumes:
+      - ./agents/mc7:/cppagent/config
+    ports:
+      - "5007:5000"
+
+  mtconnect-agent-8:
+    build:
+      context: ./agents
+      dockerfile: Dockerfile.agent
+    volumes:
+      - ./agents/mc8:/cppagent/config
+    ports:
+      - "5008:5000"
+
+  mtconnect-agent-9:
+    build:
+      context: ./agents
+      dockerfile: Dockerfile.agent
+    volumes:
+      - ./agents/mc9:/cppagent/config
+    ports:
+      - "5009:5000"
+
+  mtconnect-agent-10:
+    build:
+      context: ./agents
+      dockerfile: Dockerfile.agent
+    volumes:
+      - ./agents/mc10:/cppagent/config
+    ports:
+      - "5010:5000"
+

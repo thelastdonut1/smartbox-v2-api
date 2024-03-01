@@ -9,6 +9,12 @@ dataDir = "/data/appdata/"
 
 @app.route('/fileShow/<path:filepath>', methods=['GET'])
 def file_show(filepath):
+    """
+    Returns the contents of the specified file within the data directory.
+    
+    :param filepath: The path to the file relative to the data directory. Path traversal is not allowed.
+    :return: The contents of the file if found and readable; otherwise, a failure message.
+    """
     if '..' in filepath:
         return 'result:failure. Directory cannot contain ..'
     full_path = os.path.join(dataDir, filepath)
@@ -22,6 +28,12 @@ def file_show(filepath):
 
 @app.route('/fileDel/<path:dir>', methods=['POST'])
 def file_del(dir):
+    """
+    Deletes the specified directory and its contents from the data directory.
+    
+    :param dir: The path to the directory relative to the data directory. Path traversal is not allowed.
+    :return: JSON response indicating 'success' or 'failure' with an error message.
+    """
     if '..' in dir:
         return jsonify(result='failure. Directory cannot contain ..')
     full_path = os.path.join(dataDir, dir)
@@ -35,6 +47,12 @@ def file_del(dir):
 
 @app.route('/fileList/<path:dir>', methods=['GET'])
 def file_list(dir):
+    """
+    Lists all files in the specified directory within the data directory.
+    
+    :param dir: The path to the directory relative to the data directory. Path traversal is not allowed.
+    :return: JSON response with a list of files in the specified directory or a failure message.
+    """
     if '..' in dir:
         return jsonify(result='failure. Directory cannot contain ..')
     full_path = os.path.join(dataDir, dir)
@@ -45,6 +63,12 @@ def file_list(dir):
 
 @app.route('/upload', methods=['POST'])
 def upload():
+    """
+    Uploads a file to a specified directory within the data directory. Creates the directory if it doesn't exist.
+    
+    :param dir: The path to the directory relative to the data directory, obtained from the 'dir' form field. Path traversal is not allowed.
+    :return: JSON response indicating 'success' or 'failure' with an appropriate message.
+    """
     dir = request.form.get('dir')
     if '..' in dir:
         return jsonify(result='failure. Directory cannot contain ..')
@@ -61,6 +85,12 @@ def upload():
 
 @app.route('/download/<path:filepath>', methods=['GET'])
 def download(filepath):
+    """
+    Initiates a download of the specified file from the data directory.
+    
+    :param filepath: The path to the file relative to the data directory. Path traversal is not allowed.
+    :return: The file as an attachment if it exists; otherwise, a JSON response indicating failure.
+    """
     if '..' in filepath:
         return jsonify(result='failure. Directory cannot contain ..')
     return send_from_directory(directory=dataDir, filename=filepath, as_attachment=True)

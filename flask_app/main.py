@@ -33,7 +33,7 @@ def show_file():
         with open(full_path, "r") as f:
             return jsonify(result=f.read())
     except Exception as e:
-        return jsonify(result=f'failure. {str(e)}')
+        return jsonify(result=f'Failure. {str(e)}')
 
 
 # POST: /file/delete
@@ -69,9 +69,9 @@ def delete_file():
 
     try:
         full_path.unlink()
-        return jsonify(result='success')
+        return jsonify(result='Success')
     except Exception as e:
-        return jsonify(result=f'failure. {str(e)}')
+        return jsonify(result=f'Failure. {str(e)}')
 
 
 # GET: /file/list?dir=mc1

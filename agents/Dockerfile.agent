@@ -47,7 +47,7 @@ ARG WITH_RUBY='True'
 
 # set some variables
 ENV PATH="$HOME/venv3.9/bin:$PATH"
-ENV CONAN_PROFILE='/root/agent/cppagent/conan/profiles/docker'
+ENV CONAN_PROFILE='conan/profiles/docker'
 
 # update os and add dependencies
 # note: Dockerfiles run as root by default, so don't need sudo
@@ -66,22 +66,16 @@ RUN  apt-get update \
   && pip install conan -v 'conan==2.0.9'
 
 # make an agent directory and cd into it
-WORKDIR /root/agent
+RUN git clone https://github.com/mtconnect/cppagent.git /cppagent
 
-# bring in the repo contents, minus .dockerignore files
-COPY . cppagent
+WORKDIR /cppagent
 
-ARG WITH_TESTS=false
-ARG WITH_TESTS_ARG=argument
+RUN ls
 
-# Build and optionally test
-RUN  if [ -z "$WITH_TESTS" ] || [ "$WITH_TESTS" = "false" ]; then \
-       WITH_TESTS_ARG="--test-folder="; \
-     else \
-       WITH_TESTS_ARG=""; \
-     fi \
-  && conan profile detect \
-  && conan create cppagent \
+RUN conan profile detect && \
+conan profile list
+
+RUN conan create . \
        --build=missing \
        -c "tools.build:jobs=$CONAN_CPU_COUNT" \
        -o agent_prefix=mtc \
@@ -90,11 +84,12 @@ RUN  if [ -z "$WITH_TESTS" ] || [ "$WITH_TESTS" = "false" ]; then \
        -o cpack_destination=/root/agent \
        -o cpack_name=dist \
        -o cpack_generator=TGZ \
-       -pr "$CONAN_PROFILE" \
-       "${WITH_TESTS_ARG}" \
-  && tar xf dist.tar.gz \
-  && rm dist.tar.gz
+       -pr "$CONAN_PROFILE"
 
+RUN ls -l && \
+tar xf dist.tar.gz && \
+rm dist.tar.gz
+   
 # ---------------------------------------------------------------------
 # release
 # ---------------------------------------------------------------------

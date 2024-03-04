@@ -1,99 +1,170 @@
 from flask import Flask, request, send_from_directory, jsonify
-import os
-import subprocess
-import socket
-import time
+from pathlib import Path
 
 app = Flask(__name__)
-dataDir = "/data/appdata/"
+root_dir = Path(__file__).parents[1]
+agent_dir = root_dir / 'agents'
 
-@app.route('/fileShow/<path:filepath>', methods=['GET'])
-def file_show(filepath):
+
+# GET: /file/show?path=mc1/agent.cfg
+@app.route('/file/show', methods=['GET'])
+def show_file():
     """
     Returns the contents of the specified file within the data directory.
     
     :param filepath: The path to the file relative to the data directory. Path traversal is not allowed.
     :return: The contents of the file if found and readable; otherwise, a failure message.
     """
-    if '..' in filepath:
-        return 'result:failure. Directory cannot contain ..'
-    full_path = os.path.join(dataDir, filepath)
-    if not os.path.exists(full_path):
-        return 'result:failure. no such file'
+
+    file_path = request.args.get('path')
+
+    if file_path is None:
+        return jsonify(result='Failure. No path provided')
+
+    # Prevent user from path traversal
+    if '..' in file_path:
+        return jsonify(result='Failure. Directory traversal is not allowed')
+    
+    full_path = agent_dir / file_path
+
+    if not full_path.exists():
+        return jsonify(result='Failure. No such file or directory')
     try:
         with open(full_path, "r") as f:
-            return f.read()
+            return jsonify(result=f.read())
     except Exception as e:
-        return f"result:failure. unknown error {str(e)}"
+        return jsonify(result=f'failure. {str(e)}')
 
-@app.route('/fileDel/<path:dir>', methods=['POST'])
-def file_del(dir):
+
+# POST: /file/delete
+# Body = {
+#    path: mc1/agent.cfg
+# }
+@app.route('/file/delete', methods=['POST'])
+def delete_file():
     """
     Deletes the specified directory and its contents from the data directory.
     
-    :param dir: The path to the directory relative to the data directory. Path traversal is not allowed.
     :return: JSON response indicating 'success' or 'failure' with an error message.
     """
-    if '..' in dir:
-        return jsonify(result='failure. Directory cannot contain ..')
-    full_path = os.path.join(dataDir, dir)
-    if not os.path.exists(full_path):
-        return jsonify(result='failure. no such directory')
+    if not request.is_json:
+        return jsonify(result='Failure. Content-Type must be application/json')
+    
+    file_path = request.json.get('path') if request.json else None
+
+    if file_path is None:
+        return 'Result: Failure. No path provided'
+
+    # Prevent user from path traversal
+    if '..' in file_path:
+        return jsonify(result='Failure. Directory traversal is not allowed')
+    
+    full_path = agent_dir / file_path
+
+    if not full_path.exists():
+        return jsonify(result='Failure. No such file or directory')
+    
+    if not full_path.is_file():
+        return jsonify(result='Failure. Not a file')
+
     try:
-        subprocess.call(['rm', '-Rf', full_path])
+        full_path.unlink()
         return jsonify(result='success')
     except Exception as e:
         return jsonify(result=f'failure. {str(e)}')
 
-@app.route('/fileList/<path:dir>', methods=['GET'])
-def file_list(dir):
+
+# GET: /file/list?dir=mc1
+@app.route('/file/list', methods=['GET'])
+def file_list():
     """
     Lists all files in the specified directory within the data directory.
     
-    :param dir: The path to the directory relative to the data directory. Path traversal is not allowed.
     :return: JSON response with a list of files in the specified directory or a failure message.
     """
+
+    dir = request.args.get('dir')
+
+    # Prevent user from path traversal
     if '..' in dir:
         return jsonify(result='failure. Directory cannot contain ..')
-    full_path = os.path.join(dataDir, dir)
-    if not os.path.exists(full_path):
-        return jsonify(result='failure. no such directory')
-    files = [f for f in os.listdir(full_path) if os.path.isfile(os.path.join(full_path, f))]
+    
+    full_path = agent_dir / dir
+
+    if not full_path.exists():
+        return jsonify(result='Failure. No such directory')
+    
+    if not full_path.is_dir():
+        return jsonify(result='Failure. Not a directory')
+    
+    files = [f.name for f in full_path.iterdir() if f.is_file()]
+    
     return jsonify(files)
 
+
+# POST: /upload
+# multipart/form-data
+# dir: mc1
+# file: <file>
+
+# Should maybe update this to only allow agent folders (mc1, mc2, etc)
+# Could iterate through the agent folders and check if the dir is in the list
 @app.route('/upload', methods=['POST'])
 def upload():
     """
     Uploads a file to a specified directory within the data directory. Creates the directory if it doesn't exist.
     
     :param dir: The path to the directory relative to the data directory, obtained from the 'dir' form field. Path traversal is not allowed.
+    :param file: The file to upload, obtained from the 'file' form field.
     :return: JSON response indicating 'success' or 'failure' with an appropriate message.
     """
+    if not request.headers.get('Content-Type').startswith('multipart/form-data'):
+        return jsonify(result='Failure. Content-Type must be multipart/form-data')
+    
     dir = request.form.get('dir')
-    if '..' in dir:
-        return jsonify(result='failure. Directory cannot contain ..')
-    full_path = os.path.join(dataDir, dir)
-    if 'file' not in request.files:
-        return jsonify(result='failure. No file part')
-    file = request.files['file']
-    if file.filename == '':
-        return jsonify(result='failure. No selected file')
-    if not os.path.exists(full_path):
-        os.makedirs(full_path)
-    file.save(os.path.join(full_path, file.filename))
-    return jsonify(result='success.')
 
-@app.route('/download/<path:filepath>', methods=['GET'])
-def download(filepath):
+    if dir is None:
+        return jsonify('Result: Failure. No path provided')
+    
+    # Prevent user from path traversal
+    if '..' in dir:
+        return jsonify(result='Failure. Directory cannot contain ..')
+
+    if 'file' not in request.files:
+        return jsonify(result='Failure. No file part')
+    
+    file = request.files['file']
+
+    if file.filename == '':
+        return jsonify(result='Failure. No selected file')
+
+    full_path = agent_dir / dir
+    full_path.mkdir(parents=True, exist_ok=True)
+
+    file_path = full_path / file.filename
+    file.save(file_path)
+
+    return jsonify(result='Success.')
+
+
+# GET: /download?filepath=mc9/agent_log.log
+@app.route('/download', methods=['GET'])
+def download():
     """
     Initiates a download of the specified file from the data directory.
     
     :param filepath: The path to the file relative to the data directory. Path traversal is not allowed.
     :return: The file as an attachment if it exists; otherwise, a JSON response indicating failure.
     """
+
+    filepath = request.args.get('filepath')
+
     if '..' in filepath:
-        return jsonify(result='failure. Directory cannot contain ..')
-    return send_from_directory(directory=dataDir, filename=filepath, as_attachment=True)
+        return jsonify(result='Failure. Directory cannot contain ..')
+    
+    print(agent_dir)
+    print(filepath)
+    return send_from_directory(directory=agent_dir, path=filepath, as_attachment=True)
 
 # The agent management, network configuration, and other specific functionalities
 # would need to be adapted based on how you manage agents and configurations in your environment.

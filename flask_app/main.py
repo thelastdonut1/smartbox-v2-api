@@ -166,8 +166,54 @@ def download():
     print(filepath)
     return send_from_directory(directory=agent_dir, path=filepath, as_attachment=True)
 
-# The agent management, network configuration, and other specific functionalities
-# would need to be adapted based on how you manage agents and configurations in your environment.
+
+# GET: /agent/list
+@app.route('/agent/list', methods=['GET'])
+def agent_list():
+    """
+    Lists all agent folders within the data directory.
+    
+    :return: JSON response with a list of agent folders or a failure message.
+    """
+    agents = [f.name for f in agent_dir.iterdir() if f.is_dir()]
+    return jsonify(agents)
+
+
+# GET: /agent/start?agent=mc1
+@app.route('/agent/start', methods=['GET'])
+def start_agent():
+    """
+    Starts the specified agent.
+    
+    :param agent: The name of the agent to start.
+    :return: JSON response indicating 'success' or 'failure' with an appropriate message.
+    """
+    agent = request.args.get('agent')
+
+    if agent is None:
+        return jsonify(result='Failure. No agent provided')
+    
+    # Return a not implemented message for now
+    return jsonify(result='Failure. Not yet implemented')
+
+
+# GET: /agent/stop?agent=mc1
+@app.route('/agent/stop', methods=['GET'])
+def stop_agent():
+    """
+    Stops the specified agent.
+    
+    :param agent: The name of the agent to stop.
+    :return: JSON response indicating 'success' or 'failure' with an appropriate message.
+    """
+    agent = request.args.get('agent')
+
+    if agent is None:
+        return jsonify(result='Failure. No agent provided')
+    
+    # Return a not implemented message for now
+    return jsonify(result='Failure. Not yet implemented')
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5010, debug=True)

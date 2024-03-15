@@ -7,13 +7,13 @@ import uvicorn
 app = FastAPI()
 root = Path(__file__).parents[1] # Project root directory
 
-# Agents directory is sibling of fast_app directory
+# Agents directory is sibling of fast_app directory on local file system
 agent_dir = root / "agents"
 
-# Connect to Docker
-client = docker.from_env()
+# # Connect to Docker
+# client = docker.from_env()
 
-# GET: /file/show?path=mc1/agent.cfg
+# GET: /file/show?path=mc1/config/agent.cfg
 @app.get("/file/show")
 async def show_file(path: str):
     """
@@ -36,7 +36,7 @@ async def show_file(path: str):
 
 # POST: /file/delete
 # Body = {
-#    path: mc1/agent.cfg
+#    path: mc1/config/agent.cfg
 # }
 @app.post("/file/delete")
 async def delete_file(path: str = Form(...)):
@@ -59,7 +59,7 @@ async def delete_file(path: str = Form(...)):
         return JSONResponse(content={"result": f"Failure. {str(e)}"}, status_code=500)
     
 
-# GET: /file/list?dir=mc1
+# GET: /file/list?dir=mc1/config
 @app.get("/file/list")
 async def file_list(dir: str):
     """
@@ -78,7 +78,7 @@ async def file_list(dir: str):
 
 # POST: /upload
 # multipart/form-data
-# dir: mc1
+# dir: mc1/config
 # file: <file>
 @app.post("/upload")
 async def upload(dir: str = Form(...), file: UploadFile = File(...)):
@@ -99,7 +99,7 @@ async def upload(dir: str = Form(...), file: UploadFile = File(...)):
     return {"result": "Success."}
 
 
-# GET: /download?filepath=mc1/agent.cfg
+# GET: /download?filepath=mc1/config/agent.cfg
 @app.get("/download")
 async def download(filepath: str):
     """

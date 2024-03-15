@@ -4,5 +4,6 @@ env/
 # VS Code Configuration
 .vscode/
 
-
+# Pycache
+fast_app/__pycache__/
 

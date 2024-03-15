@@ -2,20 +2,21 @@ version: '3.8'
 
 services:
 
-#   dind-test2:
+#   dind-test:
 #     image: docker:dind
 #     privileged: true
 #     volumes:
-#       - ../Docking:/flask_app
+#       - ../Docking:/fast_app
 #     ports:
 #       - "5000:5000"
 
-  flask-app:
+  fast-api-app:
     build: 
-      context: ./flask_app
+      context: ./fast_app
       dockerfile: Dockerfile
     volumes:
-      - ./flask_app:/app
+      - ./fast_app:/app
+      - ./agents:/agents
     ports:
       - "5000:5000"
 

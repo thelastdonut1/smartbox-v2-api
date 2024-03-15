@@ -1,9 +1,12 @@
 from flask import Flask, request, send_from_directory, jsonify
 from pathlib import Path
+import docker
 
 app = Flask(__name__)
-root_dir = Path(__file__).parents[1]
-agent_dir = root_dir / 'agents'
+root_dir = Path(__file__).parent
+print(root_dir)
+agent_dir = root_dir / 'app'
+client = docker.from_env()
 
 
 # GET: /file/show?path=mc1/agent.cfg
@@ -162,9 +165,9 @@ def download():
     if '..' in filepath:
         return jsonify(result='Failure. Directory cannot contain ..')
     
-    print(agent_dir)
+    
     print(filepath)
-    return send_from_directory(directory=agent_dir, path=filepath, as_attachment=True)
+    return send_from_directory(directory=root_dir, path=filepath, as_attachment=True)
 
 
 # GET: /agent/list
@@ -175,6 +178,7 @@ def agent_list():
     
     :return: JSON response with a list of agent folders or a failure message.
     """
+
     agents = [f.name for f in agent_dir.iterdir() if f.is_dir()]
     return jsonify(agents)
 
@@ -189,6 +193,23 @@ def start_agent():
     :return: JSON response indicating 'success' or 'failure' with an appropriate message.
     """
     agent = request.args.get('agent')
+    agent_number = agent.split('mc')[1]
+    port = '500' + agent_number
+    
+    # config_path = f'/config/{agent}/agent.cfg'
+    config_path = root_dir / 'config' / agent
+    container = client.containers.run(
+            '617f1fb4646f207eef33f5e65f8c4c69896ebb3d826e7187d76b1e2b8e346a6d',
+            volumes = {
+                config_path: {'bind': '/mtconnect/config', 'mode': 'rw'} 
+            },
+            ports = {
+                '5000/tcp': port
+            },
+            detach = True
+        )
+
+
 
     if agent is None:
         return jsonify(result='Failure. No agent provided')
@@ -217,3 +238,5 @@ def stop_agent():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5010, debug=True)
+
+

@@ -2,7 +2,7 @@ from flask import Flask, request, send_from_directory, jsonify
 from pathlib import Path
 import docker
 from socket import socket, AF_INET, SOCK_STREAM
-from DockerCreate import build_or_get_image, run_container
+from DockerCreate import build_or_get_image, run_container, get_existing_container, stop_container, start_container, delete_container
 
 app = Flask(__name__)
 root_dir = Path(__file__).parent
@@ -195,29 +195,18 @@ def start_agent():
     :return: JSON response indicating 'success' or 'failure' with an appropriate message.
     """
     agent = request.args.get('agent')
-    agent_number = agent.split('mc')[1]
-    port = '500' + agent_number
-    
-    # config_path = f'/config/{agent}/agent.cfg'
-    config_path = root_dir / 'config' / agent
-    container = client.containers.run(
-            '617f1fb4646f207eef33f5e65f8c4c69896ebb3d826e7187d76b1e2b8e346a6d',
-            volumes = {
-                config_path: {'bind': '/mtconnect/config', 'mode': 'rw'} 
-            },
-            ports = {
-                '5000/tcp': port
-            },
-            detach = True
-        )
-
-
 
     if agent is None:
         return jsonify(result='Failure. No agent provided')
     
-    # Return a not implemented message for now
-    return jsonify(result='Failure. Not yet implemented')
+    container = get_existing_container(client, agent)
+    if not container:
+        return jsonify(result= f"Container '{agent}' does not exsist. Please check name and try again.")
+
+    start_container(agent)  
+
+    return jsonify(result= f"Container '{agent}' started.")
+   
 
 
 # GET: /agent/stop?agent=mc1
@@ -234,10 +223,14 @@ def stop_agent():
     if agent is None:
         return jsonify(result='Failure. No agent provided')
     
-    # Return a not implemented message for now
-    return jsonify(result='Failure. Not yet implemented')
+    container = get_existing_container(client, agent)
+    if not container:
+        return jsonify(result= f"Container '{agent}' does not exsist. Please check name and try again.")
 
+    stop_container(agent)  
 
+    return jsonify(result= f"Container '{agent}' stopped.")
+   
 
 # POST: /create
 # Body = {
@@ -282,7 +275,32 @@ def is_port_in_use(port):
 
 
 
+# POST: /delete
+# Body = {
+#    name: mc1
+# }
+@app.route('/delete', methods=['POST'])
+def delete_agent():
+    """
+    Deletes the specified directory and its contents from the data directory.
+    
+    :return: JSON response indicating 'success' or 'failure' with an error message.
+    """
+    if not request.is_json:
+        return jsonify(result='Failure. Content-Type must be application/json')
+    
+    container_name = request.json.get('name') if request.json else None
+    
+    if container_name is None:
+        return 'Result: No name provided'
 
+    
+    container = get_existing_container(client, container_name)
+    if not container:
+        return jsonify(f"Container '{container_name}' does not exsist. Please check name and try again")
+        
+    delete_container(container_name)
+    return jsonify(f"Container '{container_name}' was deleted")
 
 
 if __name__ == '__main__':

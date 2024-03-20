@@ -60,6 +60,47 @@ def run_container(image, agent_name, port):
     logging.info(f"Container '{agent_name}' started.")
     return container
 
+
+def delete_container(name):
+    try:
+        container = client.containers.get(name)
+        container.stop()
+        container.remove()
+    except docker.errors.APIError as e:
+            logging.info(f"Container '{name}' did not get removed. Error: {e}.")
+            return
+    except docker.errors.NotFound as e:
+        logging.info(f"Container '{name}' does not exists. Try again Error: {e}.")
+        return
+    logging.info(("Container successfully removed"))
+
+    mounts = container.attrs['Mounts']
+    for mount in mounts:
+        volume_name = mount["Name"]
+        try:
+            volume = client.volumes.get(volume_name)
+            volume.remove()
+        except docker.errors.NotFound as e:
+            logging.info(f"Volume '{volume_name}' does not exists. Try again Error: {e}.")
+            return
+        except docker.errors.APIError as e:
+            logging.info(f"Volume '{volume_name}' did not get removed. Container Error: {e}.")
+            return
+
+
+    
+    
+
+def stop_container(agent_name):
+    container = client.containers.get(agent_name)
+    container.stop()
+
+
+def start_container(agent_name):
+    container = client.containers.get(agent_name)
+    container.start()
+    
+
 if __name__ == "__main__":
     image = build_or_get_image()
     run_container(image)

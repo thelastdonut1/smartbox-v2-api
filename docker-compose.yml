@@ -1,113 +1,23 @@
 version: '3.8'
 
 services:
-
-# services:
-#   dind-test2:
-#     image: docker:dind
-#     privileged: true
-#     volumes:
-#       - ../Docking:/flask_app
-#     ports:
-#       - "5000:5000"
+  # dind-test2:
+  #   image: docker:dind
+  #   privileged: true
+  #   volumes:
+  #     - ../Docking:/flask_app
+  #   ports:
+  #     - "5000:5000"
   
-
-
   flask-app:
     build: 
       context: ./flask_app
       dockerfile: Dockerfile
+    privileged: true
     ports:
       - "5000:5000"
     volumes:
       - ./flask_app:/app
-
-  # mtconnect-agent-1:
-  #   image: mtconnect/agent:latest
-  #   volumes:
-  #     - ./flask_app/config/mc1:/mtconnect/config
-  #     - ./flask_app/data:/mtconnect/data
-  #     - ./flask_app/log/mc1:/mtconnect/log
-  #   ports:
-  #     - "5001:5000"
-
-  # mtconnect-agent-2:
-  #   image: mtconnect/agent:latest
-  #   volumes:
-  #     - ./flask_app/config/mc2:/mtconnect/config
-  #     - ./flask_app/data:/mtconnect/data
-  #     - ./flask_app/log/mc2:/mtconnect/log
-  #   ports:
-  #     - "5002:5000"
-
-  # mtconnect-agent-3:
-  #   image: mtconnect/agent:latest
-  #   volumes:
-  #     - ./flask_app/config/mc3:/mtconnect/config
-  #     - ./flask_app/data:/mtconnect/data
-  #     - ./flask_app/log/mc3:/mtconnect/log
-  #   ports:
-  #     - "5003:5000"
-
-  # mtconnect-agent-4:
-  #   image: mtconnect/agent:latest
-  #   volumes:
-  #     - ./flask_app/config/mc4:/mtconnect/config
-  #     - ./flask_app/data:/mtconnect/data
-  #     - ./flask_app/log/mc4:/mtconnect/log
-  #   ports:
-  #     - "5004:5000"
-
-  # mtconnect-agent-5:
-  #   image: mtconnect/agent:latest
-  #   volumes:
-  #     - ./flask_app/config/mc5:/mtconnect/config
-  #     - ./flask_app/data:/mtconnect/data
-  #     - ./flask_app/log/mc5:/mtconnect/log
-  #   ports:
-  #     - "5005:5000"
-
-  # mtconnect-agent-6:
-  #   image: mtconnect/agent:2.2
-  #   volumes:
-  #     - ./flask_app/config/mc6:/mtconnect/config
-  #     - ./flask_app/data:/mtconnect/data
-  #     - ./flask_app/log/mc6:/mtconnect/log
-  #   ports:
-  #     - "5006:5000"
-
-  # mtconnect-agent-7:
-  #   image: mtconnect/agent:2.2
-  #   volumes:
-  #     - ./flask_app/config/mc7:/mtconnect/config
-  #     - ./flask_app/data:/mtconnect/data
-  #     - ./flask_app/log/mc7:/mtconnect/log
-  #   ports:
-  #     - "5007:5000"
-
-  # mtconnect-agent-8:
-  #   image: mtconnect/agent:2.2
-  #   volumes:
-  #     - ./flask_app/config/mc8:/mtconnect/config
-  #     - ./flask_app/data:/mtconnect/data
-  #     - ./flask_app/log/mc8:/mtconnect/log
-  #   ports:
-  #     - "5008:5000"
-
-  # mtconnect-agent-9:
-  #   image: mtconnect/agent:2.2
-  #   volumes:
-  #     - ./flask_app/config/mc9:/mtconnect/config
-  #     - ./flask_app/data:/mtconnect/data
-  #     - ./flask_app/log/mc9:/mtconnect/log
-  #   ports:
-  #     - "5009:5000"
-
-  # mtconnect-agent-10:
-  #   image: mtconnect/agent:2.2
-  #   volumes:
-  #     - ./flask_app/config/mc10:/mtconnect/config
-  #     - ./flask_app/data:/mtconnect/data
-  #     - ./flask_app/log/mc10:/mtconnect/log
-  #   ports:
-  #     - "5010:5000"
+      - type: bind
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock

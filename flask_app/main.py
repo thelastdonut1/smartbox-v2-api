@@ -1,6 +1,8 @@
 from flask import Flask, request, send_from_directory, jsonify
 from pathlib import Path
 import docker
+from socket import socket, AF_INET, SOCK_STREAM
+from DockerCreate import build_or_get_image, run_container
 
 app = Flask(__name__)
 root_dir = Path(__file__).parent
@@ -234,6 +236,53 @@ def stop_agent():
     
     # Return a not implemented message for now
     return jsonify(result='Failure. Not yet implemented')
+
+
+
+# POST: /create
+# Body = {
+#    name: mc1
+#    port: 5002
+# }
+
+# Could iterate through the agent folders and check if the dir is in the list
+# Add a way to check if a port has been taken by a container even if the container is not in use
+# Creates differnet agents 
+    # Get: /create?name=mc1
+@app.route('/create', methods=['POST'])
+def create():
+    """
+    Will call the DockerCreate.py and make a new agent based off of the user promps
+
+    """
+
+    port = request.json.get('port') if request.json else None
+    agent_name = request.json.get('name') if request.json else None
+
+    if not port:
+        return jsonify(result= "Port not specified")
+    
+    if not agent_name:
+        return jsonify(result= "Agent name not specified")
+    
+
+    if is_port_in_use(port):
+        return jsonify(result= "Post is in use. Please use a different port")
+
+
+    image = build_or_get_image()
+    container = run_container(image, agent_name, port)
+
+    return jsonify(result=f'{container.name} Started on {port}')
+
+
+def is_port_in_use(port):
+    with socket(AF_INET, SOCK_STREAM) as s:
+        return s.connect_ex(('localhost', port)) == 0
+
+
+
+
 
 
 if __name__ == '__main__':

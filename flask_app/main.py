@@ -2,7 +2,7 @@ from flask import Flask, request, send_from_directory, jsonify
 from pathlib import Path
 import docker
 from socket import socket, AF_INET, SOCK_STREAM
-from DockerCreate import build_or_get_image, run_container, get_existing_container, stop_container, start_container, delete_container
+from DockerCommands import build_or_get_image, run_container, get_existing_container, stop_container, start_container, delete_container, read_file, make_multiple_containers, upload_file
 
 app = Flask(__name__)
 root_dir = Path(__file__).parent
@@ -11,7 +11,7 @@ agent_dir = root_dir / 'app'
 client = docker.from_env()
 
 
-# GET: /file/show?path=mc1/agent.cfg
+# GET: /file/show?name=mc1&file=agent.cfg
 @app.route('/file/show', methods=['GET'])
 def show_file():
     """
@@ -20,25 +20,23 @@ def show_file():
     :param filepath: The path to the file relative to the data directory. Path traversal is not allowed.
     :return: The contents of the file if found and readable; otherwise, a failure message.
     """
+    agent_name = request.args.get('name')
 
-    file_path = request.args.get('path')
-
-    if file_path is None:
+    if agent_name is None:
         return jsonify(result='Failure. No path provided')
 
-    # Prevent user from path traversal
-    if '..' in file_path:
-        return jsonify(result='Failure. Directory traversal is not allowed')
-    
-    full_path = agent_dir / file_path
+    file = request.args.get('file')
 
-    if not full_path.exists():
-        return jsonify(result='Failure. No such file or directory')
-    try:
-        with open(full_path, "r") as f:
-            return jsonify(result=f.read())
-    except Exception as e:
-        return jsonify(result=f'Failure. {str(e)}')
+    if file is None:
+        return jsonify(result='Failure. No file provided')
+    
+    container = get_existing_container(client, agent_name)
+    if not container:
+        return jsonify(result= f"Container '{agent_name}' does not exist. Please check name and try again.")
+    
+    return jsonify(result= f"{read_file(file, agent_name)}")
+
+
 
 
 # POST: /file/delete
@@ -201,7 +199,7 @@ def start_agent():
     
     container = get_existing_container(client, agent)
     if not container:
-        return jsonify(result= f"Container '{agent}' does not exsist. Please check name and try again.")
+        return jsonify(result= f"Container '{agent}' does not exist. Please check name and try again.")
 
     start_container(agent)  
 
@@ -225,7 +223,7 @@ def stop_agent():
     
     container = get_existing_container(client, agent)
     if not container:
-        return jsonify(result= f"Container '{agent}' does not exsist. Please check name and try again.")
+        return jsonify(result= f"Container '{agent}' does not exist. Please check name and try again.")
 
     stop_container(agent)  
 
@@ -240,12 +238,12 @@ def stop_agent():
 
 # Could iterate through the agent folders and check if the dir is in the list
 # Add a way to check if a port has been taken by a container even if the container is not in use
-# Creates differnet agents 
+# Creates different agents 
     # Get: /create?name=mc1
 @app.route('/create', methods=['POST'])
 def create():
     """
-    Will call the DockerCreate.py and make a new agent based off of the user promps
+    Will call the DockerCreate.py and make a new agent based off of the user prompts
 
     """
 
@@ -297,10 +295,83 @@ def delete_agent():
     
     container = get_existing_container(client, container_name)
     if not container:
-        return jsonify(f"Container '{container_name}' does not exsist. Please check name and try again")
+        return jsonify(f"Container '{container_name}' does not exist. Please check name and try again")
         
     delete_container(container_name)
     return jsonify(f"Container '{container_name}' was deleted")
+
+
+
+# POST: /create
+# Body = {
+#    name: Agent
+#    port: 5001
+#    number: 10
+# }
+# Could iterate through the agent folders and check if the dir is in the list
+# Add a way to check if a port has been taken by a container even if the container is not in use
+# This will create agents based on the number passed into the route
+# this could be changed to work on startup later
+
+@app.route('/create/multiple', methods=['POST'])
+def create_ten():
+    """
+    Will call the DockerCreate.py and make 10 new agents based off of the user prompts
+    name: the name will be used to name the agents and will increment by 1
+    port: the port will be what the agents start on. This will also increment by 1
+
+    """
+
+    port = request.json.get('port') if request.json else None
+    agent_name = request.json.get('name') if request.json else None
+    number = request.json.get('number') if request.json else None
+
+    if not port:
+        return jsonify(result= "Port not specified")
+    
+    if not agent_name:
+        return jsonify(result= "Agent name not specified")
+    
+    if not number:
+        return jsonify(result= "Number of agents not specified")
+
+    image = build_or_get_image()
+    container, used_port = make_multiple_containers(image, agent_name, port, number)
+    if not container:
+        return jsonify(result= f'Failure. Port {used_port} is in use. Please use a different port. Agents have not been created.')
+
+    return jsonify(result=f'{number} Containers named {agent_name} started on {port}-{used_port}')
+
+
+# TODO: Add a way to change the agent.cfg file( this does not work yet )
+# POST: /add/file
+# Body = {
+#    name: Agent
+#    file: agent.cfg
+# }
+@app.route('/add/file', methods=['POST'])
+def add_new_file():
+    """
+    This will change the agent.cfg or mazak.xml file based on what the user sends
+
+    """
+    file = request.files['file']
+    agent_name = request.form.get('name')
+
+    if not file:
+        return jsonify(result= "File not specified")
+    
+    if not agent_name:
+        return jsonify(result= "Agent name not specified")
+
+    container = get_existing_container(client, agent_name)
+    if not container:
+        return jsonify(result= f"Container '{agent_name}' does not exist. Please check name and try again.")
+    
+    upload_file(file, agent_name)
+    return jsonify(result=f'{file} uploaded to {agent_name}')
+    
+
 
 
 if __name__ == '__main__':

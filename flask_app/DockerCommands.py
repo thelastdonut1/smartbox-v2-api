@@ -88,8 +88,43 @@ def delete_container(name):
             return
 
 
+# def replace_agent_config(file, agent_name):
+#     container = client.containers.get(agent_name)
+
+#     volumes = client.volumes.list()
+#     for volume in volumes:
+#         print(volume.name)
+#         print(volume.attrs)
+
+
+# TODO: Find a way to make a read function that will read different files from the agent container
+        
+def read_file(file, agent_name):
+    container = client.containers.get(agent_name)
+    if file in ["agent.cfg", "mazak.xml"]:
+        output = container.exec_run(f"cat -b /mtconnect/config/{file}")
+    elif file in ["agent.log"]:
+        output = container.exec_run(f"cat -v -e /mtconnect/log/{file}")
+    return output
     
-    
+# TODO: make a mass create function that will run when the flask app starts up (10 agents)
+
+def make_multiple_containers(image, agent_name, port, number):
+    for numbers in range(number):
+        try:
+            if is_port_in_use(port + numbers):
+                logging.info(f"Port {port + numbers} is in use. Try again.")
+                return False, port + numbers
+            run_container(image, agent_name + str(numbers), port + numbers)
+        except docker.errors.APIError as e:
+            logging.info(f"Container '{agent_name + str(numbers)}' did not start. Error: {e}.")
+    return True, port + numbers
+
+
+def is_port_in_use(port):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        return s.connect_ex(('localhost', port)) == 0
+
 
 def stop_container(agent_name):
     container = client.containers.get(agent_name)
@@ -100,18 +135,25 @@ def start_container(agent_name):
     container = client.containers.get(agent_name)
     container.start()
     
+# TODO: make a function that will upload a new agent.cfg or mazak.xml to a container
+#?   
+def upload_file(file, agent_name):
+    container = client.containers.get(agent_name)
+    if file.filename in ["agent.cfg", "mazak.xml"]:
+        container.put_archive("/mtconnect/config", data=file)
+#?
+        
 
 if __name__ == "__main__":
     image = build_or_get_image()
     run_container(image)
 
-# [<Volume: mc1-data>, <Volume: mc1-log>, <Volume: mc1-config>]
-    
+
 
 
     # not working async
-#     async def get_availible_ports(port_range):
-#     avalible_ports = []
+#     async def get_available_ports(port_range):
+#     available_ports = []
 #     tasks = []
 #     start_port, end_port = port_range
 #     for port in range(start_port, end_port + 1):
@@ -122,9 +164,9 @@ if __name__ == "__main__":
 #     for result in results:
 #         port, status = result
 #         if status == False:
-#              avalible_ports.append(port)
+#              available_ports.append(port)
 
-#     return avalible_ports
+#     return available_ports
 
 # async def check_port(port):
 #     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -132,29 +174,29 @@ if __name__ == "__main__":
 #         return (port, status)
 
 # def get_min_port():
-#     ports = asyncio.run(get_availible_ports(PORT_RANGE))
+#     ports = asyncio.run(get_available_ports(PORT_RANGE))
 #     min_port = min(ports)
 #     return min_port
         
 
         # working sync
     
-    # def get_availible_ports(port_range):
-#     avalible_ports = []
+    # def get_available_ports(port_range):
+#     available_ports = []
 #     start_port, end_port = port_range
 #     for port in range(start_port, end_port + 1):
 #         status = is_port_in_use(port)
 #         if not status:
-#             avalible_ports.append(port)
+#             available_ports.append(port)
             
-#     return avalible_ports
+#     return available_ports
 
 # def is_port_in_use(port):
 #     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
 #         return s.connect_ex(('localhost', port)) == 0
 
 # def get_min_port():
-#     ports = get_availible_ports(PORT_RANGE)
+#     ports = get_available_ports(PORT_RANGE)
 #     min_port = min(ports)
 #     return min_port
         

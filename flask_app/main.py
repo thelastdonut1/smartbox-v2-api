@@ -7,7 +7,8 @@ from DockerCommands import build_or_get_image, run_container, get_existing_conta
 app = Flask(__name__)
 root_dir = Path(__file__).parent
 print(root_dir)
-agent_dir = root_dir / 'app'
+agent_dir = root_dir / 'config'
+#agent_dir = root_dir / 'app'
 client = docker.from_env()
 
 
@@ -178,7 +179,7 @@ def agent_list():
     
     :return: JSON response with a list of agent folders or a failure message.
     """
-
+    #agent_dir = root_dir / 'config'
     agents = [f.name for f in agent_dir.iterdir() if f.is_dir()]
     return jsonify(agents)
 

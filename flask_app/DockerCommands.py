@@ -101,11 +101,14 @@ def delete_container(name):
         
 def read_file(file, agent_name):
     container = client.containers.get(agent_name)
-    if file in ["agent.cfg", "mazak.xml"]:
-        output = container.exec_run(f"cat -b /mtconnect/config/{file}")
-    elif file in ["agent.log"]:
-        output = container.exec_run(f"cat -v -e /mtconnect/log/{file}")
-    return output
+    exec_command = f"cat /mtconnect/config/{file}" if file in ["agent.cfg", "mazak.xml"] else f"cat /mtconnect/log/{file}" # command to read the file
+    result = container.exec_run(exec_command, stderr=True, stdout=True, stream=False)
+    if result.exit_code == 0: # if the result exit code is 0, then the command was successful
+        return result.output.decode('utf-8') # decoding the byte output to string
+    else:
+        logging.error(f"Error reading file: {file} from {agent_name}, exit code: {result.exit_code}")
+        return f"Error executing command: {exec_command}, exit code: {result.exit_code}"
+    
     
 # TODO: make a mass create function that will run when the flask app starts up (10 agents)
 
@@ -148,55 +151,3 @@ if __name__ == "__main__":
     image = build_or_get_image()
     run_container(image)
 
-
-
-
-    # not working async
-#     async def get_available_ports(port_range):
-#     available_ports = []
-#     tasks = []
-#     start_port, end_port = port_range
-#     for port in range(start_port, end_port + 1):
-#         task = asyncio.create_task(check_port(port))
-#         tasks.append(task)
-
-#     results = await asyncio.gather(*tasks)
-#     for result in results:
-#         port, status = result
-#         if status == False:
-#              available_ports.append(port)
-
-#     return available_ports
-
-# async def check_port(port):
-#     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-#         status =  s.connect_ex(('localhost', port)) == 0
-#         return (port, status)
-
-# def get_min_port():
-#     ports = asyncio.run(get_available_ports(PORT_RANGE))
-#     min_port = min(ports)
-#     return min_port
-        
-
-        # working sync
-    
-    # def get_available_ports(port_range):
-#     available_ports = []
-#     start_port, end_port = port_range
-#     for port in range(start_port, end_port + 1):
-#         status = is_port_in_use(port)
-#         if not status:
-#             available_ports.append(port)
-            
-#     return available_ports
-
-# def is_port_in_use(port):
-#     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-#         return s.connect_ex(('localhost', port)) == 0
-
-# def get_min_port():
-#     ports = get_available_ports(PORT_RANGE)
-#     min_port = min(ports)
-#     return min_port
-        

@@ -3,13 +3,16 @@ from pathlib import Path
 import logging
 import socket
 import pdb
+import shutil
 
 logging.basicConfig(level=logging.INFO)
 
 client = docker.from_env()
 
-root_dir = Path(__file__).parents[1]
-agent_dir = root_dir / "agents"
+root_dir = Path(__file__).parent # Path to the root directory flask_app
+agent_dir = Path("/srv/smartbox-api/agents") # Path to the agent directory
+agent_dir.mkdir(parents=True, exist_ok=True) # Create the agent directory if it does not exist
+
 PORT_RANGE = (5000, 5010)
 
 
@@ -25,7 +28,7 @@ def build_or_get_image():
         logging.info("Image found locally.")
     except docker.errors.ImageNotFound:
         logging.info("Image not found, building now...")
-        image, _ = client.images.build(path="Create", dockerfile="Dockerfile", tag="mtconnect-agent", rm=True)
+        image, _ = client.images.build(path="agent", dockerfile="Dockerfile.agent", tag="mtconnect-agent", rm=True)
     return image
 
 
@@ -34,30 +37,32 @@ def run_container(image, agent_name, port):
     if existing_container:
         logging.info(f"Container '{agent_name}' already exists. Consider stopping/removing it before proceeding.")
         return
-    volume_name = agent_name
-    volume_name_config = volume_name + "-config"
-    volume_name_data = volume_name + "-data"
-    volume_name_log = volume_name + "-log"
+    
+    local_path = agent_dir / agent_name # Path to the agent directory
 
-    # test = client.volumes.list()
-    # print(test[0].__dict__.keys())
-
-    existing_volumes = [volume.name for volume in client.volumes.list()]
-    print(existing_volumes)
-    try:    
-        for volume in existing_volumes:
-            if volume in [volume_name_log, volume_name_config, volume_name_data]:    
-                # print(volume_name_log, volume_name_config, volume_name_data)
-                raise ValueError
-    except ValueError:
-        logging.info(f"Volume '{volume_name}' already exists. Try again")
+    if local_path.exists(): # Check if the agent directory exists
+        logging.info(f"Agent '{agent_name}' already exists. Consider removing it before proceeding.")
         return
+    local_path.mkdir(parents=True) # Create the agent directory if it does not exist
 
+    target = root_dir / "agent" / "default"
+    logging.info(f"Copying files from {target} to {local_path} in container {agent_name}...")
+
+    shutil.copytree(root_dir / "agent" / "default", local_path, dirs_exist_ok=True)
+
+    # host_machine_path =  Path("/smartbox-api/agents") / agent_name # Path to the agent directory on the host machine
+
+    # For testing on Windows
+    host_machine_path = Path(f"C:\\Users\\kderas\\Documents\\smartbox-api\\agents\\{agent_name}")
+    logging.info(f"Host machine path: {host_machine_path}")
+    logging.info(f"agent path: {agent_name}")
     agent_port = port
+
     container = client.containers.run(image, detach=True, ports={5000:agent_port},
-                                      volumes={f"{volume_name_config}": {"bind": "/mtconnect/config", "mode": "rw"}, f"{volume_name_data}": {"bind": "/mtconnect/data", "mode": "rw"}, f"{volume_name_log}": {"bind": "/mtconnect/log", "mode": "rw"}},
+                                      volumes={f"{host_machine_path}": {"bind": "/app/agent", "mode": "rw"}}, # Mount the agent directory to the container
                                       name=agent_name)
     logging.info(f"Container '{agent_name}' started.")
+
     return container
 
 

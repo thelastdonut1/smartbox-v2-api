@@ -1,0 +1,6 @@
+FROM mtconnect/agent:latest
+
+ 
+
+
+CMD ["/usr/bin/mtcagent", "run", "/app/agent/agent.cfg"]

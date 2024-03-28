@@ -1,3 +1,4 @@
+import logging
 from flask import Flask, request, send_from_directory, jsonify
 from pathlib import Path
 import docker
@@ -7,10 +8,22 @@ from DockerCommands import build_or_get_image, run_container, get_existing_conta
 app = Flask(__name__)
 root_dir = Path(__file__).parent
 print(root_dir)
-agent_dir = root_dir / 'config'
-#agent_dir = root_dir / 'app'
+
+agent_dir = Path("/srv/smartbox-api/agents") # Path to the agent directory
+agent_dir.mkdir(parents=True, exist_ok=True) # Create the agent directory if it does not exist
+
 client = docker.from_env()
 
+# GET: /hello-world
+# @app.route('/hello-world', methods=['GET'])
+# def hello_world():
+#     """
+#     Returns a simple 'Hello, World!' message.
+    
+#     :return: A 'Hello, World!' message.
+#     """
+#     logging.info("Hello, World!")
+#     return jsonify(result='Hello, World!')
 
 # GET: /file/show?name=mc1&file=agent.cfg
 @app.route('/file/show', methods=['GET'])
@@ -276,30 +289,45 @@ def is_port_in_use(port):
 
 # POST: /delete
 # Body = {
-#    name: mc1
+#    "name": "mc1" OR "names": ["mc1", "mc2", "mc3"]
 # }
 @app.route('/delete', methods=['POST'])
-def delete_agent():
+def delete_agents():
     """
-    Deletes the specified directory and its contents from the data directory.
-    
-    :return: JSON response indicating 'success' or 'failure' with an error message.
+    Deletes agent(s) based on a single name or a list of names provided in the request.
+    Still need to handle valueErrors more thourghly.
     """
     if not request.is_json:
-        return jsonify(result='Failure. Content-Type must be application/json')
-    
-    container_name = request.json.get('name') if request.json else None
-    
-    if container_name is None:
-        return 'Result: No name provided'
+        return jsonify(result='Failure. Content-Type must be application/json'), 415
 
-    
-    container = get_existing_container(client, container_name)
-    if not container:
-        return jsonify(f"Container '{container_name}' does not exist. Please check name and try again")
-        
-    delete_container(container_name)
-    return jsonify(f"Container '{container_name}' was deleted")
+    container_name = request.json.get('name') # Single deletion
+    container_names = request.json.get('names') # Multiple deletions
+
+    if container_name and container_names:
+        return jsonify(result='Failure. Please provide either a single name or a list of names, not both.'), 400
+
+    if container_name:
+        # Single deletion, converting to list for consistency
+        names_to_delete = [container_name]
+    elif isinstance(container_names, list):
+        # Multiple deletions
+        names_to_delete = container_names
+    else:
+        return jsonify(result='Failure. Invalid or missing agent name(s)'), 400
+
+    results = {} # Store the results of the deletion process in a empty dictionary
+    for name in names_to_delete:
+        try:
+            print(name)
+            container = get_existing_container(client, name)
+            if container:
+                delete_container(name)
+                results[name] = 'Deleted'
+            else:
+                results[name] = 'Not Found'
+        except ValueError as e:
+            results[name] = f'Error: {e}'
+    return jsonify(results)
 
 
 
@@ -376,6 +404,6 @@ def add_new_file():
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5010, debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=True)
 
 

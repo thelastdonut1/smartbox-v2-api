@@ -17,7 +17,9 @@ services:
     ports:
       - "5000:5000"
     volumes:
-      - ./flask_app:/app
+      - type: bind
+        source: C:\Users\kderas\Documents\smartbox-api\agents
+        target: /srv/smartbox-api/agents
       - type: bind
         source: /var/run/docker.sock
         target: /var/run/docker.sock

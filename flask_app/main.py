@@ -14,17 +14,6 @@ agent_dir.mkdir(parents=True, exist_ok=True) # Create the agent directory if it 
 
 client = docker.from_env()
 
-# GET: /hello-world
-# @app.route('/hello-world', methods=['GET'])
-# def hello_world():
-#     """
-#     Returns a simple 'Hello, World!' message.
-    
-#     :return: A 'Hello, World!' message.
-#     """
-#     logging.info("Hello, World!")
-#     return jsonify(result='Hello, World!')
-
 # GET: /file/show?name=mc1&file=agent.cfg
 @app.route('/file/show', methods=['GET'])
 def show_file():
@@ -34,6 +23,7 @@ def show_file():
     :param filepath: The path to the file relative to the data directory. Path traversal is not allowed.
     :return: The contents of the file if found and readable; otherwise, a failure message.
     """
+    logging.info("Received GET request to file/show")
     agent_name = request.args.get('name')
 
     if agent_name is None:
@@ -44,37 +34,44 @@ def show_file():
     if file is None:
         return jsonify(result='Failure. No file provided')
     
-    container = get_existing_container(client, agent_name)
-    if not container:
-        return jsonify(result= f"Container '{agent_name}' does not exist. Please check name and try again.")
-    
-    return jsonify(result= f"{read_file(file, agent_name)}")
+    file_path = agent_dir / agent_name / file # Path to the file
+
+    if not file_path.exists(): # Check if the file exists
+        return jsonify(result='Failure. No such file or directory')
+    try:
+        with open(file_path, 'r') as f: # Open the file
+            return jsonify(f.read())
+    except Exception as e: # Catch any exceptions
+        return jsonify(result=f'Failure. {str(e)}')
 
 
 
-
-# POST: /file/delete
+# DELETE: /file/delete
 # Body = {
-#    path: mc1/agent.cfg
+#    name: mc1
+#    file: agent.cfg
 # }
-@app.route('/file/delete', methods=['POST'])
+@app.route('/file/delete', methods=['DELETE'])
 def delete_file():
     """
     Deletes the specified directory and its contents from the data directory.
     
     :return: JSON response indicating 'success' or 'failure' with an error message.
     """
+    logging.info("Received GET request to file/show")
     if not request.is_json:
         return jsonify(result='Failure. Content-Type must be application/json')
     
-    file_path = request.json.get('path') if request.json else None
+    name = request.json.get('name') if request.json else None
+    file = request.json.get('file') if request.json else None
+    file_path = agent_dir / name / file # Path to the file
 
     if file_path is None:
         return 'Result: Failure. No path provided'
 
     # Prevent user from path traversal
-    if '..' in file_path:
-        return jsonify(result='Failure. Directory traversal is not allowed')
+    if '..' in name or '..' in file:
+        return jsonify(result='Failure. Directory cannot contain ..')
     
     full_path = agent_dir / file_path
 
@@ -119,14 +116,14 @@ def file_list():
     return jsonify(files)
 
 
-# POST: /upload
+# POST: /file/upload
 # multipart/form-data
 # dir: mc1
 # file: <file>
 
 # Should maybe update this to only allow agent folders (mc1, mc2, etc)
 # Could iterate through the agent folders and check if the dir is in the list
-@app.route('/upload', methods=['POST'])
+@app.route('/file/upload', methods=['POST'])
 def upload():
     """
     Uploads a file to a specified directory within the data directory. Creates the directory if it doesn't exist.
@@ -164,8 +161,8 @@ def upload():
     return jsonify(result='Success.')
 
 
-# GET: /download?filepath=mc9/agent_log.log
-@app.route('/download', methods=['GET'])
+# GET: /file/download?filepath=mc9/agent_log.log
+@app.route('/file/download', methods=['GET'])
 def download():
     """
     Initiates a download of the specified file from the data directory.
@@ -244,17 +241,16 @@ def stop_agent():
     return jsonify(result= f"Container '{agent}' stopped.")
    
 
-# POST: /create
+# POST: /agent/create
 # Body = {
 #    name: mc1
 #    port: 5002
 # }
 
-# Could iterate through the agent folders and check if the dir is in the list
-# Add a way to check if a port has been taken by a container even if the container is not in use
+#!Handle the existing container error to display a message
 # Creates different agents 
     # Get: /create?name=mc1
-@app.route('/create', methods=['POST'])
+@app.route('/agent/create', methods=['POST'])
 def create():
     """
     Will call the DockerCreate.py and make a new agent based off of the user prompts
@@ -287,11 +283,11 @@ def is_port_in_use(port):
 
 
 
-# POST: /delete
+# POST: /agent/delete
 # Body = {
 #    "name": "mc1" OR "names": ["mc1", "mc2", "mc3"]
 # }
-@app.route('/delete', methods=['POST'])
+@app.route('/agent/delete', methods=['POST'])
 def delete_agents():
     """
     Deletes agent(s) based on a single name or a list of names provided in the request.
@@ -378,27 +374,27 @@ def create_ten():
 #    name: Agent
 #    file: agent.cfg
 # }
-@app.route('/add/file', methods=['POST'])
-def add_new_file():
-    """
-    This will change the agent.cfg or mazak.xml file based on what the user sends
+# @app.route('/add/file', methods=['POST'])
+# def add_new_file():
+#     """
+#     This will change the agent.cfg or mazak.xml file based on what the user sends
 
-    """
-    file = request.files['file']
-    agent_name = request.form.get('name')
+#     """
+#     file = request.files['file']
+#     agent_name = request.form.get('name')
 
-    if not file:
-        return jsonify(result= "File not specified")
+#     if not file:
+#         return jsonify(result= "File not specified")
     
-    if not agent_name:
-        return jsonify(result= "Agent name not specified")
+#     if not agent_name:
+#         return jsonify(result= "Agent name not specified")
 
-    container = get_existing_container(client, agent_name)
-    if not container:
-        return jsonify(result= f"Container '{agent_name}' does not exist. Please check name and try again.")
+#     container = get_existing_container(client, agent_name)
+#     if not container:
+#         return jsonify(result= f"Container '{agent_name}' does not exist. Please check name and try again.")
     
-    upload_file(file, agent_name)
-    return jsonify(result=f'{file} uploaded to {agent_name}')
+#     upload_file(file, agent_name)
+#     return jsonify(result=f'{file} uploaded to {agent_name}')
     
 
 

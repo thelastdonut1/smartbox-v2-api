@@ -3,47 +3,41 @@ from flask import Flask, request, send_from_directory, jsonify
 from pathlib import Path
 import docker
 from socket import socket, AF_INET, SOCK_STREAM
-from DockerCommands import build_or_get_image, run_container, get_existing_container, stop_container, start_container, delete_container, read_file, make_multiple_containers, upload_file
+from werkzeug.exceptions import BadRequest
+from werkzeug.utils import secure_filename
+from DockerCommands import (build_or_get_image, run_container, get_existing_container, stop_container, start_container,
+                            delete_container, make_multiple_containers)
 
 app = Flask(__name__)
 root_dir = Path(__file__).parent
-print(root_dir)
 
-agent_dir = Path("/srv/smartbox-api/agents") # Path to the agent directory
-agent_dir.mkdir(parents=True, exist_ok=True) # Create the agent directory if it does not exist
+agent_dir = Path("/srv/smartbox-api/agents")  # Path to the agent directory
+agent_dir.mkdir(parents=True, exist_ok=True)  # Create the agent directory if it does not exist
 
 client = docker.from_env()
 
-# GET: /file/show?name=mc1&file=agent.cfg
-@app.route('/file/show', methods=['GET'])
-def show_file():
+
+# GET: /file/show/mc1/agent.cfg
+@app.route('/file/show/<path:file_path>', methods=['GET'])
+def show_file(file_path):
     """
     Returns the contents of the specified file within the data directory.
     
-    :param filepath: The path to the file relative to the data directory. Path traversal is not allowed.
+    :param file_path: The path to the file relative to the data directory. Path traversal is not allowed.
     :return: The contents of the file if found and readable; otherwise, a failure message.
     """
     logging.info("Received GET request to file/show")
-    agent_name = request.args.get('name')
 
-    if agent_name is None:
-        return jsonify(result='Failure. No path provided')
+    safe_file_path = Path(agent_dir, secure_filename(file_path))
 
-    file = request.args.get('file')
+    if not safe_file_path.is_file():
+        return jsonify(result='Failure. The file or directory does not exist.')
 
-    if file is None:
-        return jsonify(result='Failure. No file provided')
-    
-    file_path = agent_dir / agent_name / file # Path to the file
-
-    if not file_path.exists(): # Check if the file exists
-        return jsonify(result='Failure. No such file or directory')
     try:
-        with open(file_path, 'r') as f: # Open the file
+        with open(file_path, 'r') as f:  # Open the file
             return jsonify(f.read())
-    except Exception as e: # Catch any exceptions
+    except Exception as e:  # Catch any exceptions
         return jsonify(result=f'Failure. {str(e)}')
-
 
 
 # DELETE: /file/delete
@@ -58,61 +52,63 @@ def delete_file():
     
     :return: JSON response indicating 'success' or 'failure' with an error message.
     """
-    logging.info("Received GET request to file/show")
+    logging.info("Received DELETE request to /file/delete")
+
     if not request.is_json:
-        return jsonify(result='Failure. Content-Type must be application/json')
-    
-    name = request.json.get('name') if request.json else None
-    file = request.json.get('file') if request.json else None
-    file_path = agent_dir / name / file # Path to the file
+        raise BadRequest("Content-Type must be application/json")
 
-    if file_path is None:
-        return 'Result: Failure. No path provided'
+    data = request.get_json()
+    name = data.get('name')
+    file = data.get('file')
 
-    # Prevent user from path traversal
-    if '..' in name or '..' in file:
-        return jsonify(result='Failure. Directory cannot contain ..')
-    
-    full_path = agent_dir / file_path
+    if not name or not file:
+        raise BadRequest("Both 'name' and 'file' are required in the JSON payload")
 
-    if not full_path.exists():
-        return jsonify(result='Failure. No such file or directory')
-    
-    if not full_path.is_file():
+    # Sanitize and validate the directory name and file name
+    sanitized_name = secure_filename(name)
+    sanitized_file = secure_filename(file)
+
+    if not sanitized_name or not sanitized_file:
+        raise BadRequest("Invalid directory or file name")
+
+    file_path = agent_dir / sanitized_name / sanitized_file
+
+    if not file_path.exists():
+        return jsonify(result='Failure. No such file')
+
+    if not file_path.is_file():
         return jsonify(result='Failure. Not a file')
 
     try:
-        full_path.unlink()
+        file_path.unlink()
         return jsonify(result='Success')
     except Exception as e:
         return jsonify(result=f'Failure. {str(e)}')
 
 
-# GET: /file/list?dir=mc1
-@app.route('/file/list', methods=['GET'])
-def file_list():
+@app.route('/file/list/<path:directory>', methods=['GET'])
+def file_list(directory):
     """
-    Lists all files in the specified directory within the data directory.
-    
+    Lists all the files in the specified agent's directory.
+
+    :param directory: The agent directory to list the files of
     :return: JSON response with a list of files in the specified directory or a failure message.
     """
+    sanitized_directory = secure_filename(directory)
 
-    dir = request.args.get('dir')
+    if not sanitized_directory:
+        return jsonify(result='Failure. Invalid directory name')
 
-    # Prevent user from path traversal
-    if '..' in dir:
-        return jsonify(result='failure. Directory cannot contain ..')
-    
-    full_path = agent_dir / dir
+    full_path = agent_dir / sanitized_directory
 
     if not full_path.exists():
         return jsonify(result='Failure. No such directory')
-    
+
     if not full_path.is_dir():
         return jsonify(result='Failure. Not a directory')
-    
+
     files = [f.name for f in full_path.iterdir() if f.is_file()]
-    
+
     return jsonify(files)
 
 
@@ -121,64 +117,68 @@ def file_list():
 # dir: mc1
 # file: <file>
 
-# Should maybe update this to only allow agent folders (mc1, mc2, etc)
+# Should maybe update this to only allow agent folders (mc1, mc2, etc.)
 # Could iterate through the agent folders and check if the dir is in the list
 @app.route('/file/upload', methods=['POST'])
 def upload():
     """
     Uploads a file to a specified directory within the data directory. Creates the directory if it doesn't exist.
-    
-    :param dir: The path to the directory relative to the data directory, obtained from the 'dir' form field. Path traversal is not allowed.
-    :param file: The file to upload, obtained from the 'file' form field.
+
+    Request body parameters:
+    - dir: The directory where the file should be uploaded (e.g., 'mc1', 'mc2', etc.).
+    - file: The file to be uploaded.
+
     :return: JSON response indicating 'success' or 'failure' with an appropriate message.
     """
-    if not request.headers.get('Content-Type').startswith('multipart/form-data'):
-        return jsonify(result='Failure. Content-Type must be multipart/form-data')
-    
-    dir = request.form.get('dir')
+    logging.info("Received POST request to /file/upload")
 
-    if dir is None:
-        return jsonify('Result: Failure. No path provided')
-    
-    # Prevent user from path traversal
-    if '..' in dir:
-        return jsonify(result='Failure. Directory cannot contain ..')
+    if 'multipart/form-data' not in request.content_type:
+        return BadRequest('Failure. Content-Type must be multipart/form-data')
 
-    if 'file' not in request.files:
-        return jsonify(result='Failure. No file part')
-    
-    file = request.files['file']
+    directory = request.form.get('dir')
+    file = request.files.get('file')
 
+    if not directory:
+        return BadRequest('Failure. Request body must contain a directory.')
+
+    if not file:
+        return BadRequest('Failure. Request body must contain a file')
+
+    # Can this check be consolidated into some other logic?
     if file.filename == '':
         return jsonify(result='Failure. No selected file')
 
-    full_path = agent_dir / dir
+    file_path = Path(directory, file.filename)
+
+    sanitized_file_path = secure_filename(str(file_path))
+
+    if not sanitized_file_path:
+        return BadRequest('Failure. File or directory name was invalid.')
+
+    full_path = agent_dir / sanitized_file_path
     full_path.mkdir(parents=True, exist_ok=True)
 
-    file_path = full_path / file.filename
-    file.save(file_path)
+    file.save(full_path)
 
     return jsonify(result='Success.')
 
 
-# GET: /file/download?filepath=mc9/agent_log.log
-@app.route('/file/download', methods=['GET'])
-def download():
+# GET: /file/download/mc9/agent_log.log
+@app.route('/file/download/<path:file_path>', methods=['GET'])
+def download(file_path):
     """
     Initiates a download of the specified file from the data directory.
-    
-    :param filepath: The path to the file relative to the data directory. Path traversal is not allowed.
+
+    :param file_path: The path to the file relative to the data directory. Path traversal is not allowed.
     :return: The file as an attachment if it exists; otherwise, a JSON response indicating failure.
     """
 
-    filepath = request.args.get('filepath')
+    safe_file_path = Path(root_dir, secure_filename(file_path))
 
-    if '..' in filepath:
-        return jsonify(result='Failure. Directory cannot contain ..')
-    
-    
-    print(filepath)
-    return send_from_directory(directory=root_dir, path=filepath, as_attachment=True)
+    if not safe_file_path.is_file():
+        return jsonify(result='Failure. The file does not exist.')
+
+    return send_from_directory(directory=root_dir, path=file_path, as_attachment=True)
 
 
 # GET: /agent/list
@@ -189,7 +189,7 @@ def agent_list():
     
     :return: JSON response with a list of agent folders or a failure message.
     """
-    #agent_dir = root_dir / 'config'
+    # agent_dir = root_dir / 'config'
     agents = [f.name for f in agent_dir.iterdir() if f.is_dir()]
     return jsonify(agents)
 
@@ -207,15 +207,14 @@ def start_agent():
 
     if agent is None:
         return jsonify(result='Failure. No agent provided')
-    
+
     container = get_existing_container(client, agent)
     if not container:
-        return jsonify(result= f"Container '{agent}' does not exist. Please check name and try again.")
+        return jsonify(result=f"Container '{agent}' does not exist. Please check name and try again.")
 
-    start_container(agent)  
+    start_container(agent)
 
-    return jsonify(result= f"Container '{agent}' started.")
-   
+    return jsonify(result=f"Container '{agent}' started.")
 
 
 # GET: /agent/stop?agent=mc1
@@ -231,15 +230,15 @@ def stop_agent():
 
     if agent is None:
         return jsonify(result='Failure. No agent provided')
-    
+
     container = get_existing_container(client, agent)
     if not container:
-        return jsonify(result= f"Container '{agent}' does not exist. Please check name and try again.")
+        return jsonify(result=f"Container '{agent}' does not exist. Please check name and try again.")
 
-    stop_container(agent)  
+    stop_container(agent)
 
-    return jsonify(result= f"Container '{agent}' stopped.")
-   
+    return jsonify(result=f"Container '{agent}' stopped.")
+
 
 # POST: /agent/create
 # Body = {
@@ -247,9 +246,9 @@ def stop_agent():
 #    port: 5002
 # }
 
-#!Handle the existing container error to display a message
+# !Handle the existing container error to display a message
 # Creates different agents 
-    # Get: /create?name=mc1
+# Get: /create?name=mc1
 @app.route('/agent/create', methods=['POST'])
 def create():
     """
@@ -261,15 +260,13 @@ def create():
     agent_name = request.json.get('name') if request.json else None
 
     if not port:
-        return jsonify(result= "Port not specified")
-    
+        return jsonify(result="Port not specified")
+
     if not agent_name:
-        return jsonify(result= "Agent name not specified")
-    
+        return jsonify(result="Agent name not specified")
 
     if is_port_in_use(port):
-        return jsonify(result= "Post is in use. Please use a different port")
-
+        return jsonify(result="Post is in use. Please use a different port")
 
     image = build_or_get_image()
     container = run_container(image, agent_name, port)
@@ -282,7 +279,6 @@ def is_port_in_use(port):
         return s.connect_ex(('localhost', port)) == 0
 
 
-
 # POST: /agent/delete
 # Body = {
 #    "name": "mc1" OR "names": ["mc1", "mc2", "mc3"]
@@ -291,13 +287,13 @@ def is_port_in_use(port):
 def delete_agents():
     """
     Deletes agent(s) based on a single name or a list of names provided in the request.
-    Still need to handle valueErrors more thourghly.
+    Still need to handle valueErrors more thoroughly.
     """
     if not request.is_json:
         return jsonify(result='Failure. Content-Type must be application/json'), 415
 
-    container_name = request.json.get('name') # Single deletion
-    container_names = request.json.get('names') # Multiple deletions
+    container_name = request.json.get('name')  # Single deletion
+    container_names = request.json.get('names')  # Multiple deletions
 
     if container_name and container_names:
         return jsonify(result='Failure. Please provide either a single name or a list of names, not both.'), 400
@@ -311,7 +307,7 @@ def delete_agents():
     else:
         return jsonify(result='Failure. Invalid or missing agent name(s)'), 400
 
-    results = {} # Store the results of the deletion process in a empty dictionary
+    results = {}  # Store the results of the deletion process in an empty dictionary
     for name in names_to_delete:
         try:
             print(name)
@@ -324,7 +320,6 @@ def delete_agents():
         except ValueError as e:
             results[name] = f'Error: {e}'
     return jsonify(results)
-
 
 
 # POST: /create
@@ -352,18 +347,19 @@ def create_ten():
     number = request.json.get('number') if request.json else None
 
     if not port:
-        return jsonify(result= "Port not specified")
-    
+        return jsonify(result="Port not specified")
+
     if not agent_name:
-        return jsonify(result= "Agent name not specified")
-    
+        return jsonify(result="Agent name not specified")
+
     if not number:
-        return jsonify(result= "Number of agents not specified")
+        return jsonify(result="Number of agents not specified")
 
     image = build_or_get_image()
     container, used_port = make_multiple_containers(image, agent_name, port, number)
     if not container:
-        return jsonify(result= f'Failure. Port {used_port} is in use. Please use a different port. Agents have not been created.')
+        return jsonify(
+            result=f'Failure. Port {used_port} is in use. Please use a different port. Agents have not been created.')
 
     return jsonify(result=f'{number} Containers named {agent_name} started on {port}-{used_port}')
 
@@ -385,21 +381,17 @@ def create_ten():
 
 #     if not file:
 #         return jsonify(result= "File not specified")
-    
+
 #     if not agent_name:
 #         return jsonify(result= "Agent name not specified")
 
 #     container = get_existing_container(client, agent_name)
 #     if not container:
 #         return jsonify(result= f"Container '{agent_name}' does not exist. Please check name and try again.")
-    
-#     upload_file(file, agent_name)
-#     return jsonify(result=f'{file} uploaded to {agent_name}')
-    
 
+#     upload_file(file, agent_name)
+#     return jsonify(result=f'{file} uploaded to {agent_name}.')
 
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
-
-

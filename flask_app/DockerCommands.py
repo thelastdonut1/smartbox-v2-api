@@ -1,4 +1,5 @@
 import docker
+import os
 from pathlib import Path
 import logging
 import socket
@@ -9,9 +10,9 @@ logging.basicConfig(level=logging.INFO)
 
 client = docker.from_env()
 
-root_dir = Path(__file__).parent # Path to the root directory flask_app
-agent_dir = Path("/srv/smartbox-api/agents") # Path to the agent directory
-agent_dir.mkdir(parents=True, exist_ok=True) # Create the agent directory if it does not exist
+root_dir = Path(__file__).parent  # Path to the root directory flask_app
+agent_dir = Path("/srv/smartbox-api/agents")  # Path to the agent directory
+agent_dir.mkdir(parents=True, exist_ok=True)  # Create the agent directory if it does not exist
 
 PORT_RANGE = (5000, 5010)
 
@@ -21,6 +22,7 @@ def get_existing_container(client, name):
         return client.containers.get(name)
     except docker.errors.NotFound:
         return None
+
 
 def build_or_get_image():
     try:
@@ -32,34 +34,42 @@ def build_or_get_image():
     return image
 
 
+class ContainerError(Exception):
+    def __init__(self, message):
+        super().__init__(message)
+        self.message = message
+
+
 def run_container(image, agent_name, port):
     existing_container = get_existing_container(client, agent_name)
     if existing_container:
         logging.info(f"Container '{agent_name}' already exists. Consider stopping/removing it before proceeding.")
-        return
-    
-    local_path = agent_dir / agent_name # Path to the agent directory
+        raise ContainerError(f"Container '{agent_name}' already exists. Consider stopping/removing it before proceeding.")
 
-    if local_path.exists(): # Check if the agent directory exists
+    local_path = agent_dir / agent_name  # Path to the agent directory
+
+    if local_path.exists():  # Check if the agent directory exists
         logging.info(f"Agent '{agent_name}' already exists. Consider removing it before proceeding.")
-        return
-    local_path.mkdir(parents=True) # Create the agent directory if it does not exist
+        raise ContainerError(f"Agent '{agent_name}' already exists. Consider removing it before proceeding.")
+
+    local_path.mkdir(parents=True)  # Create the agent directory if it does not exist
 
     target = root_dir / "agent" / "default"
     logging.info(f"Copying files from {target} to {local_path} in container {agent_name}...")
 
     shutil.copytree(root_dir / "agent" / "default", local_path, dirs_exist_ok=True)
 
-    # host_machine_path =  Path("/smartbox-api/agents") / agent_name # Path to the agent directory on the host machine
-
     # For testing on Windows
-    host_machine_path = Path(f"C:\\Users\\kderas\\Documents\\smartbox-api\\agents\\{agent_name}")
+    username = "momoore"
+    host_machine_path = Path(f"C:\\Users\\{username}\\Documents\\smartbox-api\\agents" , agent_name)
+
     logging.info(f"Host machine path: {host_machine_path}")
     logging.info(f"agent path: {agent_name}")
     agent_port = port
 
-    container = client.containers.run(image, detach=True, ports={5000:agent_port},
-                                      volumes={f"{host_machine_path}": {"bind": "/app/agent", "mode": "rw"}}, # Mount the agent directory to the container
+    container = client.containers.run(image, detach=True, ports={5000: agent_port},
+                                      volumes={f"{host_machine_path}": {"bind": "/app/agent", "mode": "rw"}},
+                                      # Mount the agent directory to the container
                                       name=agent_name)
     logging.info(f"Container '{agent_name}' started.")
 
@@ -71,14 +81,35 @@ def delete_container(name):
         container = client.containers.get(name)
         container.stop()
         container.remove()
+
+        delete_local_directory(name)
+        # delete_mounts(container)
     except docker.errors.APIError as e:
-            logging.info(f"Container '{name}' did not get removed. Error: {e}.")
-            return
+        logging.info(f"Container '{name}' did not get removed. Error: {e}.")
+        raise ContainerError(f"Container '{name}' did not get removed. Error: {e}.")
     except docker.errors.NotFound as e:
         logging.info(f"Container '{name}' does not exists. Try again Error: {e}.")
-        return
-    logging.info(("Container successfully removed"))
+        raise ContainerError(f"Container '{name}' does not exists. Try again Error: {e}.")
+    except FileNotFoundError as e:
+        logging.info(f"Directory '{name}' does not exists")
+        raise ContainerError(f"Directory '{name}' does not exist")
+    except Exception as e:
+        logging.error(f"Error while deleting container '{name}. {e}")
+        raise ContainerError(f"Error while deleting container '{name}. {e}")
+    logging.info("Container successfully removed")
 
+
+def delete_local_directory(name):
+    """
+    Deletes the agent folder and its contents. Used when removing an agent.
+    :param name: The name of the agent
+    :return: None
+    """
+    directory = agent_dir / name
+    shutil.rmtree(directory)
+
+
+def delete_mounts(container):
     mounts = container.attrs['Mounts']
     for mount in mounts:
         volume_name = mount["Name"]
@@ -103,18 +134,20 @@ def delete_container(name):
 
 
 # TODO: Find a way to make a read function that will read different files from the agent container
-        
+
 def read_file(file, agent_name):
     container = client.containers.get(agent_name)
-    exec_command = f"cat /mtconnect/config/{file}" if file in ["agent.cfg", "mazak.xml"] else f"cat /mtconnect/log/{file}" # command to read the file
+    exec_command = f"cat /mtconnect/config/{file}" if file in ["agent.cfg",
+                                                               "mazak.xml"] else f"cat /mtconnect/log/{file}"
+    # command to read the file
     result = container.exec_run(exec_command, stderr=True, stdout=True, stream=False)
-    if result.exit_code == 0: # if the result exit code is 0, then the command was successful
-        return result.output.decode('utf-8') # decoding the byte output to string
+    if result.exit_code == 0:  # if the result exit code is 0, then the command was successful
+        return result.output.decode('utf-8')  # decoding the byte output to string
     else:
         logging.error(f"Error reading file: {file} from {agent_name}, exit code: {result.exit_code}")
         return f"Error executing command: {exec_command}, exit code: {result.exit_code}"
-    
-    
+
+
 # TODO: make a mass create function that will run when the flask app starts up (10 agents)
 
 def make_multiple_containers(image, agent_name, port, number):
@@ -142,17 +175,19 @@ def stop_container(agent_name):
 def start_container(agent_name):
     container = client.containers.get(agent_name)
     container.start()
-    
+
+
 # TODO: make a function that will upload a new agent.cfg or mazak.xml to a container
-#?   
+# ?
 def upload_file(file, agent_name):
     container = client.containers.get(agent_name)
     if file.filename in ["agent.cfg", "mazak.xml"]:
         container.put_archive("/mtconnect/config", data=file)
-#?
-        
+
+
+# ?
+
 
 if __name__ == "__main__":
     image = build_or_get_image()
     run_container(image)
-

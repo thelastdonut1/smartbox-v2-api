@@ -18,7 +18,7 @@ services:
       - "5000:5000"
     volumes:
       - type: bind
-        source: C:\Users\kderas\Documents\smartbox-api\agents
+        source: C:\Users\momoore\Documents\smartbox-api\agents
         target: /srv/smartbox-api/agents
       - type: bind
         source: /var/run/docker.sock

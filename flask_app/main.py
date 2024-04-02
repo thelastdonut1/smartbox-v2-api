@@ -6,15 +6,29 @@ from socket import socket, AF_INET, SOCK_STREAM
 from werkzeug.exceptions import BadRequest
 from werkzeug.utils import secure_filename
 from DockerCommands import (build_or_get_image, run_container, get_existing_container, stop_container, start_container,
-                            delete_container, make_multiple_containers)
+                            delete_container, make_multiple_containers, ContainerError)
 
 app = Flask(__name__)
 root_dir = Path(__file__).parent
+
+logging.basicConfig(level=logging.DEBUG)
 
 agent_dir = Path("/srv/smartbox-api/agents")  # Path to the agent directory
 agent_dir.mkdir(parents=True, exist_ok=True)  # Create the agent directory if it does not exist
 
 client = docker.from_env()
+
+
+def is_safe_path(base_dir, user_path):
+    try:
+        # Resolve the path to its absolute form and ensure it exists within the base directory
+        base_path = Path(base_dir).resolve(strict=True)
+        target_path = (base_path / user_path).resolve(strict=False)
+        result = base_path in target_path.parents or target_path == base_path
+        return result
+    except FileNotFoundError:
+        # Handle the case where the path does not exist
+        return False
 
 
 # GET: /file/show/mc1/agent.cfg
@@ -28,21 +42,28 @@ def show_file(file_path):
     """
     logging.info("Received GET request to file/show")
 
-    safe_file_path = Path(agent_dir, secure_filename(file_path))
+    if not is_safe_path(agent_dir, file_path):
+        return BadRequest("Failure. Invalid file path")
 
-    if not safe_file_path.is_file():
+    full_path = Path(agent_dir, file_path)
+    logging.debug(f"Checking for file at {full_path}")
+
+    if not full_path.is_file():
+        logging.error(f"File {full_path} not found")
         return jsonify(result='Failure. The file or directory does not exist.')
 
     try:
-        with open(file_path, 'r') as f:  # Open the file
+        with open(full_path, 'r') as f:  # Open the file
+            logging.debug(f"Reading file...")
             return jsonify(f.read())
     except Exception as e:  # Catch any exceptions
+        logging.error(f"Error reading file {file_path}: {e}")
         return jsonify(result=f'Failure. {str(e)}')
 
 
 # DELETE: /file/delete
 # Body = {
-#    name: mc1
+#    dir: mc1
 #    file: agent.cfg
 # }
 @app.route('/file/delete', methods=['DELETE'])
@@ -55,37 +76,49 @@ def delete_file():
     logging.info("Received DELETE request to /file/delete")
 
     if not request.is_json:
+        logging.error(f"Content-Type of the request was not application/json.")
         raise BadRequest("Content-Type must be application/json")
 
     data = request.get_json()
-    name = data.get('name')
+    directory = data.get('dir')
     file = data.get('file')
 
-    if not name or not file:
-        raise BadRequest("Both 'name' and 'file' are required in the JSON payload")
+    if not directory:
+        logging.error(f"Directory is missing from the JSON payload.")
+        return BadRequest("Directory is missing from the JSON payload")
+
+    if not file:
+        logging.error(f"File is missing from the JSON payload")
+        raise BadRequest("File is missing from the JSON payload")
 
     # Sanitize and validate the directory name and file name
-    sanitized_name = secure_filename(name)
     sanitized_file = secure_filename(file)
 
-    if not sanitized_name or not sanitized_file:
-        raise BadRequest("Invalid directory or file name")
+    if not sanitized_file:
+        logging.error(f"File name {file.filename} is not valid.")
+        raise BadRequest("Failure. Invalid file name")
 
-    file_path = agent_dir / sanitized_name / sanitized_file
+    if not is_safe_path(agent_dir, directory):
+        logging.error(f"Directory {directory} is not a safe path.")
+        raise BadRequest("Failure. Invalid directory name.")
 
-    if not file_path.exists():
-        return jsonify(result='Failure. No such file')
+    file_path = agent_dir / directory / sanitized_file
+    logging.info(f"File path: {file_path}")
 
     if not file_path.is_file():
-        return jsonify(result='Failure. Not a file')
+        logging.error(f"File does not exist: {file_path}")
+        return jsonify(result='Failure. File does not exist.'), 404
 
     try:
         file_path.unlink()
+        logging.info(f"File was successfully deleted")
         return jsonify(result='Success')
     except Exception as e:
-        return jsonify(result=f'Failure. {str(e)}')
+        logging.error(f"Failed to delete {file_path}: {e}")
+        return jsonify(result=f'Failure. {str(e)}'), 500
 
 
+# GET: /file/list/mc1
 @app.route('/file/list/<path:directory>', methods=['GET'])
 def file_list(directory):
     """
@@ -94,20 +127,21 @@ def file_list(directory):
     :param directory: The agent directory to list the files of
     :return: JSON response with a list of files in the specified directory or a failure message.
     """
-    sanitized_directory = secure_filename(directory)
+    if not is_safe_path(agent_dir, directory):
+        logging.error(f"Directory {directory} is not a safe path.")
+        raise BadRequest("Failure. Invalid directory name.")
 
-    if not sanitized_directory:
-        return jsonify(result='Failure. Invalid directory name')
-
-    full_path = agent_dir / sanitized_directory
-
-    if not full_path.exists():
-        return jsonify(result='Failure. No such directory')
+    full_path = agent_dir / directory
 
     if not full_path.is_dir():
-        return jsonify(result='Failure. Not a directory')
+        logging.error(f"Directory does not exist: {full_path}")
+        return jsonify(result='Failure. Directory does not exist'), 404
 
     files = [f.name for f in full_path.iterdir() if f.is_file()]
+
+    logging.info(f"Found {len(files)} files in the specified directory...")
+    for file in files:
+        logging.info(f"- {file}")
 
     return jsonify(files)
 
@@ -133,32 +167,38 @@ def upload():
     logging.info("Received POST request to /file/upload")
 
     if 'multipart/form-data' not in request.content_type:
+        logging.error(f"Failure. Content-Type must be multipart/form-data")
         return BadRequest('Failure. Content-Type must be multipart/form-data')
 
     directory = request.form.get('dir')
     file = request.files.get('file')
 
     if not directory:
-        return BadRequest('Failure. Request body must contain a directory.')
+        logging.error(f"Directory is missing from the JSON payload.")
+        return BadRequest("Directory is missing from the JSON payload")
 
     if not file:
-        return BadRequest('Failure. Request body must contain a file')
+        logging.error(f"File is missing from the JSON payload")
+        raise BadRequest("File is missing from the JSON payload")
 
     # Can this check be consolidated into some other logic?
     if file.filename == '':
+        logging.error(f"No file name was provided.")
         return jsonify(result='Failure. No selected file')
 
-    file_path = Path(directory, file.filename)
+    if not is_safe_path(agent_dir, directory):
+        logging.error(f"Directory {directory} is not a safe path.")
+        return BadRequest('Failure. Invalid directory')
 
-    sanitized_file_path = secure_filename(str(file_path))
+    sanitized_file_name = secure_filename(file.filename)
 
-    if not sanitized_file_path:
-        return BadRequest('Failure. File or directory name was invalid.')
+    if not sanitized_file_name:
+        logging.error(f"Filename {file.filename} is not a safe")
+        return BadRequest(f"Filename {file.filename} is not a safe")
 
-    full_path = agent_dir / sanitized_file_path
-    full_path.mkdir(parents=True, exist_ok=True)
+    file_path = Path(agent_dir, directory, sanitized_file_name)
 
-    file.save(full_path)
+    file.save(file_path)
 
     return jsonify(result='Success.')
 
@@ -172,13 +212,20 @@ def download(file_path):
     :param file_path: The path to the file relative to the data directory. Path traversal is not allowed.
     :return: The file as an attachment if it exists; otherwise, a JSON response indicating failure.
     """
+    logging.info("Received GET request to /file")
 
-    safe_file_path = Path(root_dir, secure_filename(file_path))
+    if not is_safe_path(agent_dir, file_path):
+        logging.error(f"Specified directory is not a safe path: {file_path}.")
+        return BadRequest('Failure. Invalid file path provided.')
 
-    if not safe_file_path.is_file():
+    full_path = Path(agent_dir, file_path)
+
+    if not full_path.is_file():
+        logging.error(f"File does not exist: {full_path}.")
         return jsonify(result='Failure. The file does not exist.')
 
-    return send_from_directory(directory=root_dir, path=file_path, as_attachment=True)
+    logging.info(f"Sending file from {file_path} ...")
+    return send_from_directory(directory=agent_dir, path=file_path, as_attachment=True)
 
 
 # GET: /agent/list
@@ -269,9 +316,12 @@ def create():
         return jsonify(result="Post is in use. Please use a different port")
 
     image = build_or_get_image()
-    container = run_container(image, agent_name, port)
 
-    return jsonify(result=f'{container.name} Started on {port}')
+    try:
+        container = run_container(image, agent_name, port)
+        return jsonify(result=f'{container.name} Started on {port}')
+    except ContainerError as e:
+        return jsonify(f'Failure. {e.message}')
 
 
 def is_port_in_use(port):
@@ -279,11 +329,12 @@ def is_port_in_use(port):
         return s.connect_ex(('localhost', port)) == 0
 
 
-# POST: /agent/delete
+# DELETE: /agent/delete
 # Body = {
-#    "name": "mc1" OR "names": ["mc1", "mc2", "mc3"]
+#   "names": ["mc1"] OR ["mc1", "mc2", "mc3"]
 # }
-@app.route('/agent/delete', methods=['POST'])
+# Timeout will occur when deleting 2+ agents. Will fix when migrating to async (FastApi)
+@app.route('/agent/delete', methods=['DELETE'])
 def delete_agents():
     """
     Deletes agent(s) based on a single name or a list of names provided in the request.
@@ -292,34 +343,52 @@ def delete_agents():
     if not request.is_json:
         return jsonify(result='Failure. Content-Type must be application/json'), 415
 
-    container_name = request.json.get('name')  # Single deletion
     container_names = request.json.get('names')  # Multiple deletions
 
-    if container_name and container_names:
-        return jsonify(result='Failure. Please provide either a single name or a list of names, not both.'), 400
+    if not container_names:
+        return jsonify(result='Failure. No names were provided.'), 400
 
-    if container_name:
-        # Single deletion, converting to list for consistency
-        names_to_delete = [container_name]
-    elif isinstance(container_names, list):
-        # Multiple deletions
-        names_to_delete = container_names
+    results = delete_containers(container_names)
+
+    # Prepare the response
+    response = {
+        'results': []
+    }
+
+    for name, (result, status_code) in results.items():
+        response['results'].append({
+            'name': name,
+            'result': result,
+            'status': 'success' if status_code == 200 else 'failure'
+        })
+
+    # Determine the overall status code
+    if all(status_code == 200 for _, (_, status_code) in results.items()):
+        overall_status_code = 200
+    elif any(status_code == 200 for _, (_, status_code) in results.items()):
+        overall_status_code = 207  # Multi-Status
     else:
-        return jsonify(result='Failure. Invalid or missing agent name(s)'), 400
+        overall_status_code = 400  # Bad Request
 
+    return jsonify(response), overall_status_code
+
+
+def delete_containers(containers: list):
     results = {}  # Store the results of the deletion process in an empty dictionary
-    for name in names_to_delete:
+    for name in containers:
         try:
-            print(name)
             container = get_existing_container(client, name)
-            if container:
-                delete_container(name)
-                results[name] = 'Deleted'
-            else:
-                results[name] = 'Not Found'
-        except ValueError as e:
-            results[name] = f'Error: {e}'
-    return jsonify(results)
+            if not container:
+                results[name] = (f"Container with name {name} does not exist.", 404)
+
+            delete_container(name)
+            results[name] = (f"Deleted container {name}", 200)
+
+        except ContainerError as e:
+            results[name] = (f'Error: {e}', 400)
+        except Exception as e:
+            results[name] = (f'Error: {e}', 400)
+    return results
 
 
 # POST: /create

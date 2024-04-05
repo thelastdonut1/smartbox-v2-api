@@ -1,50 +1,15 @@
+import logging
 from fastapi import APIRouter, status, Path
 from fastapi.responses import JSONResponse
-from app.utils import is_safe_path
 from enum import Enum
 from typing import Annotated
-from pydantic import BaseModel, Field
-from pathlib import Path as p
-import logging
+from app.config import settings
+
 
 router = APIRouter(
     prefix="/files",
     tags=["files"]
 )
-
-agent_dir = p("/srv/smartbox-api/agents")  # Path to the agent directory
-agent_dir.mkdir(parents=True, exist_ok=True)  # Create the agent directory if it does not exist
-
-# # GET: /files/show/mc1/agent.cfg
-# @router.get("/show/{file_path:path}")
-# def show_file(file_path: str):
-#     """
-#     Returns the contents of the specified file within the data directory.
-
-#     :param file_path: The path to the file relative to the data directory. Path traversal is not allowed.
-#     :return: The contents of the file if found and readable; otherwise, a failure message.
-#     """
-#     logging.info("Received GET request to file/show")
-
-#     if not is_safe_path(agent_dir, file_path):
-#         logging.error(f"Invalid file path: {file_path}")
-#         return JSONResponse(status_code=400, content={"message": "Invalid file path"})
-
-#     full_path = agent_dir / file_path
-#     logging.debug(f"Attempting to read file: {full_path}")
-
-#     if not full_path.is_file():
-#         logging.error(f"File not found: {full_path}")
-#         return JSONResponse(status_code=404, content={"message": "File not found"})
-
-#     try:
-#         with open(full_path, "r") as file:
-#             logging.debug(f"Reading file...")
-#             content = file.read()
-#             return JSONResponse(status_code=200, content={"content": content})
-#     except Exception as e:
-#             logging.error(f"Error reading file {file_path}: {e}")
-#             return JSONResponse(status_code=500, content={"message": "Error reading file"})
 
 
 class AgentFile(str, Enum):
@@ -69,7 +34,7 @@ def show_file(agent: Annotated[str, Path(description="The agent whose file is to
     """
     logging.info("Received GET request to files/show")
 
-    full_path = agent_dir / agent / file.path
+    full_path = settings.agent_dir / agent / file.path
 
     logging.info(f"Checking for file: {full_path}")
 
@@ -103,21 +68,21 @@ def delete_file(agent: str, file: AgentFile):
     """
     logging.info("Received DELETE request to files/delete")
 
-    full_path = agent_dir / agent / file.path
+    full_path = settings.agent_dir / agent / file.path
 
     logging.info(f"Checking for file: {full_path}")
 
     if not full_path.is_file():
         logging.error(f"File not found: {full_path}")
-        return JSONResponse(status_code=status.HTTP_404_NOT_FOUND, content={"message": "File not found"})
+        return JSONResponse(status_code=404, content={"message": "File not found"})
 
     try:
         full_path.unlink()
         logging.info(f"File was successfully deleted")
-        return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "File was successfully deleted"})
+        return JSONResponse(status_code=200, content={"message": "File was successfully deleted"})
     except Exception as e:
         logging.error(f"Failed to delete file {full_path}: {e}")
-        return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content={"message": f"Failure. {str(e)}"})
+        return JSONResponse(status_code=500, content={"message": f"Failure. {str(e)}"})
 
 
 # GET: /files/list/mc1
@@ -130,7 +95,7 @@ async def list_files(agent: str):
     :return: JSON response with a list of files in the specified directory or a failure message.
     """
 
-    full_path = agent_dir / agent
+    full_path = settings.agent_dir / agent
 
     # May need to check for path traversal here
 

@@ -151,3 +151,5 @@ cython_debug/
 
 # FastAPI specific ignores
 .fastapi-config.yml
+app/config/.env.production
+app/config/.env.development

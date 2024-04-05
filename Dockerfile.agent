@@ -1,6 +1,4 @@
 FROM mtconnect/agent:latest
 
- 
-
-
+# Set the location where the agent will look for the configuration file
 CMD ["/usr/bin/mtcagent", "run", "/app/agent/agent.cfg"]

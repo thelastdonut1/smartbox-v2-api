@@ -3,9 +3,7 @@ from pathlib import Path
 import logging
 import shutil
 from utils import is_port_in_use
-
-
-logging.basicConfig(level=logging.INFO)
+from app.config import settings
 
 client = docker.from_env()
 
@@ -16,9 +14,6 @@ class ContainerError(Exception):
 
 
 root_dir = Path(__file__).parent  # Path to the root directory flask_app
-agent_dir = Path("/srv/smartbox-api/agents")  # Path to the agent directory
-agent_dir.mkdir(parents=True, exist_ok=True)  # Create the agent directory if it does not exist
-
 PORT_RANGE = (5000, 5010)
 
 
@@ -35,7 +30,7 @@ def build_or_get_image():
         logging.info("Image found locally.")
     except docker.errors.ImageNotFound:
         logging.info("Image not found, building now...")
-        image, _ = client.images.build(path="agent", dockerfile="Dockerfile.agent", tag="mtconnect-agent", rm=True)
+        image, _ = client.images.build(path="../docker", dockerfile="Dockerfile.agent", tag="mtconnect-agent", rm=True)
     return image
 
 
@@ -45,7 +40,7 @@ def run_container(image, agent_name, port):
         logging.info(f"Container '{agent_name}' already exists. Consider stopping/removing it before proceeding.")
         raise ContainerError(f"Container '{agent_name}' already exists. Consider stopping/removing it before proceeding.")
 
-    local_path = agent_dir / agent_name  # Path to the agent directory
+    local_path = settings.agent_dir / agent_name  # Path to the agent directory
 
     if local_path.exists():  # Check if the agent directory exists
         logging.info(f"Agent '{agent_name}' already exists. Consider removing it before proceeding.")
@@ -100,7 +95,7 @@ def delete_local_directory(name):
     :param name: The name of the agent
     :return: None
     """
-    directory = agent_dir / name
+    directory = settings.agent_dir / name
     shutil.rmtree(directory)
 
 

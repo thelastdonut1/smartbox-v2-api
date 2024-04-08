@@ -2,7 +2,7 @@ import docker
 from pathlib import Path
 import logging
 import shutil
-from utils import is_port_in_use
+from app.utils import is_port_in_use
 from app.config import settings
 
 client = docker.from_env()
@@ -17,12 +17,18 @@ root_dir = Path(__file__).parent  # Path to the root directory flask_app
 PORT_RANGE = (5000, 5010)
 
 
-def get_existing_container(client, name):
+def get_existing_container(name):
     try:
         return client.containers.get(name)
     except docker.errors.NotFound:
-        return None
+        return ContainerError(f"Container '{name}' does not exist.")
     
+def check_container_status(name):
+    try:
+        container = client.containers.get(name)
+        return container.status
+    except docker.errors.NotFound:
+        return ContainerError(f"Container '{name}' does not exist.")
 
 def build_or_get_image():
     try:
@@ -54,7 +60,7 @@ def run_container(image, agent_name, port):
     shutil.copytree(root_dir / "agent" / "default", local_path, dirs_exist_ok=True)
 
     # For testing on Windows
-    username = "momoore"
+    username = "nromeo"
     host_machine_path = Path(f"C:\\Users\\{username}\\Documents\\smartbox-api\\agents" , agent_name)
 
     logging.info(f"Host machine path: {host_machine_path}")
@@ -126,15 +132,6 @@ def make_multiple_containers(image, agent_name, port, number):
             logging.info(f"Container '{agent_name + str(numbers)}' did not start. Error: {e}.")
     return True, port + numbers
 
-
-def stop_container(agent_name):
-    container = client.containers.get(agent_name)
-    container.stop()
-
-
-def start_container(agent_name):
-    container = client.containers.get(agent_name)
-    container.start()
 
 
 if __name__ == "__main__":

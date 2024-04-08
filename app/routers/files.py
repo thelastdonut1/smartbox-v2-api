@@ -22,7 +22,7 @@ class AgentFile(str, Enum):
         """
         Returns the corresponding path for the enum value.
         """
-        paths = {"config": "config", "device": "device", "log": "logs/agent.log"}
+        paths = {"config": "agent.cfg", "device": "device.xml", "log": "logs/agent.log"}
         return paths[self.value]
 
 

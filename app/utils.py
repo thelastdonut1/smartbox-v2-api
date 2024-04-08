@@ -1,5 +1,7 @@
 from pathlib import Path
 import socket
+import random
+import string
 
 def is_safe_path(base_dir, user_path):
     try:
@@ -15,3 +17,10 @@ def is_safe_path(base_dir, user_path):
 def is_port_in_use(port):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         return s.connect_ex(('localhost', port)) == 0
+    
+def generate_random_string(length=16):
+    return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
+
+if __name__ == "__main__":
+    rand_str = generate_random_string()
+    print(rand_str)

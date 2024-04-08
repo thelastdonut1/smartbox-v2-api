@@ -1,0 +1,6 @@
+image: mtconnect/agent:latest
+detach: true
+command: ["/usr/bin/mtcagent", "run", "/app/agent/agent.cfg"]
+volumes:
+  - source: ${LOCAL_AGENT_DIR}
+    target: /app/agent

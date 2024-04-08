@@ -5,7 +5,9 @@ import shutil
 from utils import is_port_in_use
 from app.config import settings
 
+
 client = docker.from_env()
+
 
 class ContainerError(Exception):
     def __init__(self, message):
@@ -30,7 +32,7 @@ def build_or_get_image():
         logging.info("Image found locally.")
     except docker.errors.ImageNotFound:
         logging.info("Image not found, building now...")
-        image, _ = client.images.build(path="../docker", dockerfile="Dockerfile.agent", tag="mtconnect-agent", rm=True)
+        image, _ = client.images.build(path="../", dockerfile="Dockerfile.agent", tag="mtconnect-agent", rm=True)
     return image
 
 
@@ -53,18 +55,18 @@ def run_container(image, agent_name, port):
 
     shutil.copytree(root_dir / "agent" / "default", local_path, dirs_exist_ok=True)
 
-    # For testing on Windows
-    username = "momoore"
-    host_machine_path = Path(f"C:\\Users\\{username}\\Documents\\smartbox-api\\agents" , agent_name)
+    host_machine_path = Path(settings.agent_dir , agent_name)
 
     logging.info(f"Host machine path: {host_machine_path}")
-    logging.info(f"agent path: {agent_name}")
+
     agent_port = port
+
+    agent_command = ["/usr/bin/mtcagent", "run", "/app/agent/agent.cfg"]
 
     container = client.containers.run(image, detach=True, ports={5000: agent_port},
                                       volumes={f"{host_machine_path}": {"bind": "/app/agent", "mode": "rw"}},
-                                      # Mount the agent directory to the container
-                                      name=agent_name)
+                                      name=agent_name, command=agent_command)
+    
     logging.info(f"Container '{agent_name}' started.")
 
     return container

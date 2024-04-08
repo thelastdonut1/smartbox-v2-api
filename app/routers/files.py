@@ -1,10 +1,13 @@
 import logging
-from fastapi import APIRouter, status, Path
+from fastapi import APIRouter, status, Path, UploadFile,File, Form, HTTPException, Depends
 from fastapi.responses import JSONResponse
+from werkzeug.utils import secure_filename
+import shutil
 from enum import Enum
 from typing import Annotated
 from app.config import settings
-
+from pathlib import Path
+from utils import is_safe_path
 
 router = APIRouter(
     prefix="/files",
@@ -51,6 +54,49 @@ def show_file(agent: Annotated[str, Path(description="The agent whose file is to
         logging.error(f"Error reading file {full_path}: {e}")
         return JSONResponse(status_code=500, content={"message": "Error reading file"})
 
+#PUT: /files/update
+# Body = {
+#   directory: mc1
+#   file: <file>
+# }
+#TODO: Instead when uploading any .xml file rename it to device.xml. When uploading any .cfg file rename it to agent.cfg.
+@router.put("/update")
+async def update_file(directory: str = Form(...), file: UploadFile = File(...)):
+    logging.info("Received PUT request to /file/update")
+
+    # Validate directory
+    if not directory:
+        logging.error("Directory parameter is missing.")
+        raise HTTPException(status_code=400, detail="Directory parameter is missing.")
+
+    # Validate file
+    if not file:
+        logging.error("File parameter is missing.")
+        raise HTTPException(status_code=400, detail="File parameter is missing.")
+
+    # Sanitize filename to prevent directory traversal attacks
+    sanitized_file_name = secure_filename(file.filename)
+
+    # Only allow specific filenames as per the AgentFile enum
+    allowed_filenames = {AgentFile.config: "agent.cfg", AgentFile.device: "device.xml"}
+    if sanitized_file_name not in allowed_filenames.values():
+        raise HTTPException(status_code=400, detail=f"File name {sanitized_file_name} is not allowed.")
+
+    file_path = settings.agent_dir / directory / sanitized_file_name
+
+    # Ensure the path is safe and does not lead outside the intended directory
+    if not is_safe_path(settings.agent_dir, directory):
+        logging.error(f"Directory {directory} is not a safe path.")
+        raise HTTPException(status_code=400, detail=f"Directory {directory} is not a safe path")
+
+    # Create the directory if it doesn't exist
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Save the file, this will overwrite an existing file with the same name
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    return JSONResponse(status_code=200, content={"message": "File updated successfully."})
 
 # DELETE: /files/delete
 # Body = {

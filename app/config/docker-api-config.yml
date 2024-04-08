@@ -1,0 +1,13 @@
+build: 
+  path: ./
+  dockerfile: Dockerfile
+  tag: "smartbox-api-v2:latest"
+  rm: true
+privileged: true
+ports:
+  - "5000:5000"
+volumes:
+  - source: ${LOCAL_AGENT_DIR}
+    target: ${DOCKER_AGENT_DIR}
+  - source: /var/run/docker.sock
+    target: /var/run/docker.sock

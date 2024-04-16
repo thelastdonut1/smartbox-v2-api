@@ -1,13 +1,12 @@
 import logging
 from fastapi import APIRouter, status, Path, UploadFile,File, Form, HTTPException, Depends
 from fastapi.responses import JSONResponse
-from werkzeug.utils import secure_filename
 import shutil
 from enum import Enum
 from typing import Annotated
 from app.config import settings
 from pathlib import Path
-from utils import is_safe_path
+from app.utils import is_safe_path
 
 router = APIRouter(
     prefix="/files",
@@ -75,7 +74,7 @@ async def update_file(directory: str = Form(...), file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="File parameter is missing.")
 
     # Sanitize filename to prevent directory traversal attacks
-    sanitized_file_name = secure_filename(file.filename)
+    sanitized_file_name = file.filename
 
     # Only allow specific filenames as per the AgentFile enum
     allowed_filenames = {AgentFile.config: "agent.cfg", AgentFile.device: "device.xml"}

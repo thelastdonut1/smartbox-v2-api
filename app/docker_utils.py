@@ -23,7 +23,7 @@ def get_existing_container(name):
     try:
         return client.containers.get(name)
     except docker.errors.NotFound:
-        return ContainerError(f"Container '{name}' does not exist.")
+        return None
     
 def check_container_status(name):
     try:
@@ -32,45 +32,46 @@ def check_container_status(name):
     except docker.errors.NotFound:
         return ContainerError(f"Container '{name}' does not exist.")
 
-def build_or_get_image():
-    try:
-        image = client.images.get("mtconnect-agent")
-        logging.info("Image found locally.")
-    except docker.errors.ImageNotFound:
-        logging.info("Image not found, building now...")
-        image, _ = client.images.build(path="../", dockerfile="Dockerfile.agent", tag="mtconnect-agent", rm=True)
-    return image
+# def build_or_get_image():
+#     try:
+#         image = client.images.get("mtconnect-agent")
+#         logging.info("Image found locally.")
+#     except docker.errors.ImageNotFound:
+#         logging.info("Image not found, building now...")
+#         image, _ = client.images.build(path="/app", dockerfile="Dockerfile.agent", tag="mtconnect-agent", rm=True)
+#         logging.info("after the image is built")
+#     return image
 
 
+
+#! remove image from argument
 def run_container(image, agent_name, port):
-    existing_container = get_existing_container(client, agent_name)
+    existing_container = get_existing_container(agent_name)
     if existing_container:
         logging.info(f"Container '{agent_name}' already exists. Consider stopping/removing it before proceeding.")
         raise ContainerError(f"Container '{agent_name}' already exists. Consider stopping/removing it before proceeding.")
 
-    local_path = settings.agent_dir / agent_name  # Path to the agent directory
+    dst = settings.docker_agent_dir / agent_name  # Path to the agent directory
 
-    if local_path.exists():  # Check if the agent directory exists
+    if dst.exists():  # Check if the agent directory exists
         logging.info(f"Agent '{agent_name}' already exists. Consider removing it before proceeding.")
         raise ContainerError(f"Agent '{agent_name}' already exists. Consider removing it before proceeding.")
 
-    local_path.mkdir(parents=True)  # Create the agent directory if it does not exist
+    dst.mkdir(parents=True)  # Create the agent directory if it does not exist
 
-    target = root_dir / "agent" / "default"
-    logging.info(f"Copying files from {target} to {local_path} in container {agent_name}...")
+    src = Path(__file__).parent / "config" / "agent"
+    logging.info(f"Copying files from {src} to {dst} in container {agent_name}...")
 
-    shutil.copytree(root_dir / "agent" / "default", local_path, dirs_exist_ok=True)
+    shutil.copytree(src=src, dst=dst, dirs_exist_ok=True)
 
-    host_machine_path = Path(settings.agent_dir , agent_name)
-
-    logging.info(f"Host machine path: {host_machine_path}")
+    host_agent_path = settings.agent_dir /  agent_name # path to the local machine used to get the agent.cfg for the agent
 
     agent_port = port
 
     agent_command = ["/usr/bin/mtcagent", "run", "/app/agent/agent.cfg"]
 
     container = client.containers.run(image, detach=True, ports={5000: agent_port},
-                                      volumes={f"{host_machine_path}": {"bind": "/app/agent", "mode": "rw"}},
+                                      volumes={f"{host_agent_path}": {"bind": "/app/agent", "mode": "rw"}},
                                       name=agent_name, command=agent_command)
     
     logging.info(f"Container '{agent_name}' started.")
@@ -137,5 +138,7 @@ def make_multiple_containers(image, agent_name, port, number):
 
 
 if __name__ == "__main__":
-    image = build_or_get_image()
-    run_container(image)
+    print("Running docker_utils.py")
+    # image = build_or_get_image()
+    # run_container(image)
+

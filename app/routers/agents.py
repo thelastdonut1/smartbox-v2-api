@@ -2,10 +2,13 @@ from typing import Annotated
 from fastapi import APIRouter, Path
 from fastapi.responses import JSONResponse
 from pathlib import Path
+import docker
 from pydantic import BaseModel
 from app.utils import is_port_in_use
 from app.config import settings
-from app.docker_utils import run_container, build_or_get_image, get_existing_container, check_container_status
+from app.docker_utils import run_container, get_existing_container, check_container_status
+
+client = docker.from_env()
 
 router = APIRouter(
     prefix="/agents",
@@ -103,6 +106,7 @@ async def restart_agent(agent: str):
 # }
 #! The pathing works weird with out this being called inside of a container. The srv/smartbox-api/agents directory is being created in your c drive.
 #! Have to test more
+# TODO: CREATE A TIMEOUT FOR THE BUILDING OF THE IMAGE
 @router.post("/create")
 def create_agent(agent: Agent):
     """
@@ -121,7 +125,7 @@ def create_agent(agent: Agent):
     
     # Build the agent image
     try:
-        image = build_or_get_image()
+        image = client.images.pull( repository="mtconnect/agent")
     except Exception as e:
         return JSONResponse(status_code=500, content={"message": f"Error building image: {e}"})
 

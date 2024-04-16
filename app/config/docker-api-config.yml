@@ -1,5 +1,5 @@
 build: 
-  path: ./
+  path: /code/smartbox-v2-api
   dockerfile: Dockerfile
   tag: "smartbox-api-v2:latest"
   rm: true

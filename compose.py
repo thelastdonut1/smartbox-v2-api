@@ -14,9 +14,9 @@ logging.basicConfig(level=logging.INFO)
 
 def initialize():
     if MODE.lower() == 'development':
-        load_dotenv('app/config/.env.development')
+        load_dotenv('smartbox-v2-api/app/config/.env.development')
     elif MODE.lower() == 'production':
-        load_dotenv('app/config/.env.production')
+        load_dotenv('app/config/.env')
 
 
 def parse_volumes(volumes: list[dict]):

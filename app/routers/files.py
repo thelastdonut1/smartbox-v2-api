@@ -6,7 +6,7 @@ from enum import Enum
 from typing import Annotated
 from app.config import settings
 from pathlib import Path
-from app.utils import is_safe_path
+from app.app.utils import is_safe_path
 
 router = APIRouter(
     prefix="/files",
@@ -56,7 +56,7 @@ def show_file(agent: Annotated[str, Path(description="The agent whose file is to
 #PUT: /files/update
 # Body = {
 #   directory: mc1
-#   file: <file>
+#   file: <file> (agent.cfg or device.xml)
 # }
 #TODO: Instead when uploading any .xml file rename it to device.xml. When uploading any .cfg file rename it to agent.cfg.
 @router.put("/update")
@@ -77,7 +77,7 @@ async def update_file(directory: str = Form(...), file: UploadFile = File(...)):
     sanitized_file_name = file.filename
 
     # Only allow specific filenames as per the AgentFile enum
-    allowed_filenames = {AgentFile.config: "agent.cfg", AgentFile.device: "device.xml"}
+    allowed_filenames = {AgentFile.config: "agent.cfg", AgentFile.device: "device.xml", AgentFile.log: "agent.log"}
     if sanitized_file_name not in allowed_filenames.values():
         raise HTTPException(status_code=400, detail=f"File name {sanitized_file_name} is not allowed.")
 

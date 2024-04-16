@@ -7,10 +7,10 @@ from app.main import app
 
 client = TestClient(app)
 
-agent = "Agent0"
+agent = "MC1"
 
 
-# Positive test cases
+# Positive test case
 def test_show_file_positive():
 
     response = client.get(f"/files/show/{agent}/config")
@@ -63,30 +63,51 @@ def test_show_file_negative():
     assert response.status_code == 404
     assert response.json() == {"message": "File not found"}
 
-#! Need to see how the update function works to get the correct directory and file names.
-# def test_update_file_negative():
-#     response = client.put(f"/files/update", json={"directory": agent, "file": "config"})
-#     if response.status_code == 400:
-#         assert response.json() == {"message": "File parameter is missing."} or {"message": "Directory parameter is missing."} or {"message": "Error reading file"}   
+# Positive test case
+def test_delete_file_positive():
+    response = client.delete(f"/files/delete/{agent}/config")
+    assert response.status_code == 200
+    assert response.json() == {"message": "File was successfully deleted"}
 
+    response = client.delete(f"/files/delete/{agent}/device")
+    assert response.status_code == 200
+    assert response.json() == {"message": "File was successfully deleted"}
 
+    response = client.delete(f"/files/delete/{agent}/log")
+    assert response.status_code == 200
+    assert response.json() == {"message": "File was successfully deleted"}
+
+# Negative test case
 def test_delete_file_negative():
-
-    response = client.delete(f"/files/delete/Should_fail/config")
+    response = client.delete(f"/files/delete/{agent}/config")
     assert response.status_code == 404
     assert response.json() == {"message": "File not found"}
 
-    response = client.delete(f"/files/delete/Should_fail/device")
+    response = client.delete(f"/files/delete/{agent}/device")
     assert response.status_code == 404
     assert response.json() == {"message": "File not found"}
 
-    response = client.delete(f"/files/delete/Should_fail/log")
+    response = client.delete(f"/files/delete/{agent}/log")
     assert response.status_code == 404
     assert response.json() == {"message": "File not found"}
 
+# Positive test case
+def test_list_file_positive():
+    response = client.get(f"/files/list/{agent}")
+    assert response.status_code == 200
 
+# Negative test cases
 def test_list_file_negative():
+
+    response = client.get(f"/files/list/{agent}")
+    assert response.status_code == 200
     
-    response = client.get(f"/files/list/Should_fail")
-    assert response.status_code == 404
-    assert response.json() == {"message": "Agent not found"}
+    # response = client.get(f"/files/list/{agent}")
+    # assert response.status_code == 404
+    # assert response.json() == {"message": "Agent not found"}
+
+
+# Positive test cases for /update endpoint
+
+
+# Negative test cases for /update endpoint

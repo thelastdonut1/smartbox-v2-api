@@ -6,7 +6,7 @@ from enum import Enum
 from typing import Annotated
 from app.config import settings
 from pathlib import Path
-from app.app.utils import is_safe_path
+from app.utils import is_safe_path
 
 router = APIRouter(
     prefix="/files",
@@ -56,9 +56,8 @@ def show_file(agent: Annotated[str, Path(description="The agent whose file is to
 #PUT: /files/update
 # Body = {
 #   directory: mc1
-#   file: <file> (agent.cfg or device.xml)
+#   file: <file> (.xml, .cfg or .log)
 # }
-#TODO: Instead when uploading any .xml file rename it to device.xml. When uploading any .cfg file rename it to agent.cfg.
 @router.put("/update")
 async def update_file(directory: str = Form(...), file: UploadFile = File(...)):
     logging.info("Received PUT request to /file/update")
@@ -73,25 +72,32 @@ async def update_file(directory: str = Form(...), file: UploadFile = File(...)):
         logging.error("File parameter is missing.")
         raise HTTPException(status_code=400, detail="File parameter is missing.")
 
-    # Sanitize filename to prevent directory traversal attacks
-    sanitized_file_name = file.filename
+    # Extract file extension and determine new filename
+    file_extension = Path(file.filename).suffix.lower()
+    new_file_name = None
 
-    # Only allow specific filenames as per the AgentFile enum
-    allowed_filenames = {AgentFile.config: "agent.cfg", AgentFile.device: "device.xml", AgentFile.log: "agent.log"}
-    if sanitized_file_name not in allowed_filenames.values():
-        raise HTTPException(status_code=400, detail=f"File name {sanitized_file_name} is not allowed.")
+    if file_extension == '.xml':
+        new_file_name = AgentFile.device.path # as per AgentFile enum
+    elif file_extension == '.cfg':
+        new_file_name = AgentFile.config.path # as per AgentFile enum
+    elif file_extension == '.log':
+        new_file_name = AgentFile.log.path # as per AgentFile enum
+    else:
+        logging.error(f"File type {file_extension} is not allowed.")
+        raise HTTPException(status_code=400, detail=f"File type {file_extension} is not allowed.")
 
-    file_path = settings.agent_dir / directory / sanitized_file_name
+    # Construct full file path
+    file_path = Path(settings.agent_dir) / directory / new_file_name
 
-    # Ensure the path is safe and does not lead outside the intended directory
-    if not is_safe_path(settings.agent_dir, directory):
-        logging.error(f"Directory {directory} is not a safe path.")
-        raise HTTPException(status_code=400, detail=f"Directory {directory} is not a safe path")
+    # Check if path leads outside of the intended directory
+    if not is_safe_path(Path(settings.agent_dir), file_path):
+        logging.error(f"Attempt to access outside the intended directory with path: {file_path}")
+        raise HTTPException(status_code=400, detail="Invalid directory path.")
 
-    # Create the directory if it doesn't exist
+    # Ensure directory exists
     file_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Save the file, this will overwrite an existing file with the same name
+    # Save the file, overwriting any existing file with the same name
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 

@@ -2,6 +2,7 @@ from typing import Annotated
 from fastapi import APIRouter, Path
 from fastapi.responses import JSONResponse
 from pathlib import Path
+import os
 import docker
 from pydantic import BaseModel
 from app.utils import is_port_in_use
@@ -27,8 +28,7 @@ async def list_agents():
     Lists all agent folders within the data directory.
 
     """
-    # agent_dir = root_dir / 'config'
-    agents = [f.name for f in settings.agent_dir.iterdir() if f.is_dir()]
+    agents = os.listdir(settings.docker_agent_dir)
     return JSONResponse(status_code=200, content={"agents": agents})
 
 # GET: /agents/start/{agent}
@@ -139,7 +139,7 @@ def create_agent(agent: Agent):
 
 # DELETE: /agents/delete/{agent}
 @router.delete("/delete/{agent}")
-async def delete_agent(agent: str):
+def delete_agent(agent: str):
     """
     Deletes the specified agent folder and its contents from the data directory.
 

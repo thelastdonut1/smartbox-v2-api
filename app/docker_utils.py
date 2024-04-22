@@ -104,7 +104,7 @@ def delete_local_directory(name):
     :param name: The name of the agent
     :return: None
     """
-    directory = settings.agent_dir / name
+    directory = settings.docker_agent_dir / name
     shutil.rmtree(directory)
 
 

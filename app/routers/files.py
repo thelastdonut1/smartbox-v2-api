@@ -36,7 +36,7 @@ def show_file(agent: Annotated[str, Path(description="The agent whose file is to
     """
     logging.info("Received GET request to files/show")
 
-    full_path = settings.agent_dir / agent / file.path
+    full_path = settings.docker_agent_dir / agent / file.path
 
     logging.info(f"Checking for file: {full_path}")
 
@@ -87,10 +87,10 @@ async def update_file(directory: str = Form(...), file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail=f"File type {file_extension} is not allowed.")
 
     # Construct full file path
-    file_path = Path(settings.agent_dir) / directory / new_file_name
+    file_path = Path(settings.docker_agent_dir) / directory / new_file_name
 
     # Check if path leads outside of the intended directory
-    if not is_safe_path(Path(settings.agent_dir), file_path):
+    if not is_safe_path(Path(settings.docker_agent_dir), file_path):
         logging.error(f"Attempt to access outside the intended directory with path: {file_path}")
         raise HTTPException(status_code=400, detail="Invalid directory path.")
 
@@ -119,7 +119,7 @@ def delete_file(agent: str, file: AgentFile):
     """
     logging.info("Received DELETE request to files/delete")
 
-    full_path = settings.agent_dir / agent / file.path
+    full_path = settings.docker_agent_dir / agent / file.path
 
     logging.info(f"Checking for file: {full_path}")
 
@@ -146,7 +146,7 @@ async def list_files(agent: str):
     :return: JSON response with a list of files in the specified directory or a failure message.
     """
 
-    full_path = settings.agent_dir / agent
+    full_path = settings.docker_agent_dir / agent
 
     # May need to check for path traversal here
 

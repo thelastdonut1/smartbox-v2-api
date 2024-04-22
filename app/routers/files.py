@@ -1,6 +1,6 @@
 import logging
 from fastapi import APIRouter, status, Path, UploadFile,File, Form, HTTPException, Depends
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 import shutil
 from enum import Enum
 from typing import Annotated
@@ -165,11 +165,32 @@ async def list_files(agent: str):
     return JSONResponse(status_code=200, content={"message": files})
 
 
-# POST: /files/upload
+# GET: /files/download/{agent}/{file}
 # multipart/form-data
 # dir: mc1
 # file: <file>
-# @router.post("/upload")
 
 # GET: /files/download/mc9/agent.cfg
-# @router.get("/download/{dir}/{file}")
+@router.get("/download/{dir}/{file_type}")
+async def download_file(dir: str, file_type: AgentFile):
+    logging.info("Received GET request for file download")
+    full_path = settings.agent_dir / dir / file_type.path
+    logging.info(f"Attempting to download file at: {full_path}")
+
+    if not full_path.is_file():
+        logging.error(f"File not found: {full_path}")
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    # file_name = full_path.name
+    # logging.info(f"File found: {file_name}")
+
+    if file_type == AgentFile.log:
+        file_name = "agent.log"
+    elif file_type == AgentFile.config:
+        file_name = "agent.cfg"
+    elif file_type == AgentFile.device:
+        file_name = "device.xml"
+
+    print(f"File found: {file_name}")
+
+    return FileResponse(full_path, filename=file_name)

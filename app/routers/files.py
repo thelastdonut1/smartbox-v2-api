@@ -24,7 +24,7 @@ class AgentFile(str, Enum):
         """
         Returns the corresponding path for the enum value.
         """
-        paths = {"config": "agent.cfg", "device": "device.xml", "log": "logs/agent.log"}
+        paths = {"config": "agent.cfg", "device": "device.xml", "log": "agent.log"}
         return paths[self.value]
 
 
@@ -174,7 +174,7 @@ async def list_files(agent: str):
 @router.get("/download/{dir}/{file_type}")
 async def download_file(dir: str, file_type: AgentFile):
     logging.info("Received GET request for file download")
-    full_path = settings.agent_dir / dir / file_type.path
+    full_path = settings.docker_agent_dir / dir / file_type.path
     logging.info(f"Attempting to download file at: {full_path}")
 
     if not full_path.is_file():

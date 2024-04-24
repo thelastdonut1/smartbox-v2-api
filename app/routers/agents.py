@@ -7,7 +7,7 @@ import docker
 from pydantic import BaseModel
 from app.utils import is_port_in_use
 from app.config import settings
-from app.docker_utils import run_container, get_existing_container, check_container_status
+from app.docker_utils import run_container, get_existing_container, check_container_status, delete_local_directory
 
 client = docker.from_env()
 
@@ -149,6 +149,7 @@ def delete_agent(agent: str):
     try:
         container = get_existing_container(agent)
         container.stop()
+        delete_local_directory(agent)
         container.remove()
     except Exception as e:
         return JSONResponse(status_code=404, content={"message": f"Agent not found: (Error: {e})"})

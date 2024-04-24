@@ -72,7 +72,7 @@ def run_container(image, agent_name, port):
 
     container = client.containers.run(image, detach=True, ports={5000: agent_port},
                                       volumes={f"{host_agent_path}": {"bind": "/app/agent", "mode": "rw"}},
-                                      name=agent_name, command=agent_command)
+                                      name=agent_name, command=agent_command, user="root")
     
     logging.info(f"Container '{agent_name}' started.")
 

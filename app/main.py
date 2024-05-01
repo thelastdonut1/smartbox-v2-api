@@ -4,6 +4,7 @@ import uvicorn
 from fastapi import FastAPI
 from app.routers import files, agents
 from app.config import settings
+from app.docker_utils import make_ten_agents
 
 
 # Create a FastAPI application
@@ -25,6 +26,8 @@ logging.basicConfig(level=logging.INFO)
 
 # Make the agent directory if it does not exist
 settings.agent_dir.mkdir(parents=True, exist_ok=True)  # Create the agent directory if it does not exist
+
+make_ten_agents(agent_name="MC", port=5000, image="mtconnect/agent")
 
 
 # Run the FastAPI application

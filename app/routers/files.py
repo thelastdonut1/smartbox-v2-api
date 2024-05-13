@@ -1,5 +1,5 @@
 import logging
-from fastapi import APIRouter, status, Path, UploadFile,File, Form, HTTPException, Depends
+from fastapi import APIRouter, status, Path, UploadFile,File, Form, HTTPException, Depends, Request
 from fastapi.responses import JSONResponse, FileResponse
 import shutil
 from enum import Enum
@@ -7,12 +7,15 @@ from typing import Annotated
 from app.config import settings
 from pathlib import Path
 from app.utils import is_safe_path
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 router = APIRouter(
     prefix="/files",
     tags=["files"]
 )
 
+limiter = Limiter(key_func=get_remote_address)  # Define the limiter for this router
 
 class AgentFile(str, Enum):
     config = "config"
@@ -58,8 +61,11 @@ def show_file(agent: Annotated[str, Path(description="The agent whose file is to
 #   directory: mc1
 #   file: <file> (.xml, .cfg or .log)
 # }
+MAX_FILE_SIZE = 2 * 1024 * 1024  # 2 MB or we can adjust accordingly
+
 @router.put("/update")
-async def update_file(directory: str = Form(...), file: UploadFile = File(...)):
+@limiter.limit("5/minute")  # Apply rate limit: 5 requests per minute per IP
+async def update_file(request: Request, directory: str = Form(...), file: UploadFile = File(...)):
     logging.info("Received PUT request to /file/update")
 
     # Validate directory
@@ -71,6 +77,12 @@ async def update_file(directory: str = Form(...), file: UploadFile = File(...)):
     if not file:
         logging.error("File parameter is missing.")
         raise HTTPException(status_code=400, detail="File parameter is missing.")
+    
+    # Check the size of the file
+    content = await file.read()
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=413, detail="File size exceeds limit")
+    file.file.seek(0)  # Reset file pointer after checking size
 
     # Extract file extension and determine new filename
     file_extension = Path(file.filename).suffix.lower()
@@ -109,7 +121,8 @@ async def update_file(directory: str = Form(...), file: UploadFile = File(...)):
 #    file: agent.cfg
 # }
 @router.delete("/delete/{agent}/{file}")
-def delete_file(agent: str, file: AgentFile):
+@limiter.limit("3/minute")  # Apply rate limit: 3 requests per minute per IP
+def delete_file(request: Request, agent: str, file: AgentFile):
     """
     Deletes the specified directory and its contents from the data directory.
 

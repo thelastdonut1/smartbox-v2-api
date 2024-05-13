@@ -1,5 +1,5 @@
 from typing import Annotated
-from fastapi import APIRouter, Path
+from fastapi import APIRouter, Path, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pathlib import Path
 import os
@@ -8,6 +8,8 @@ from pydantic import BaseModel
 from app.utils import is_port_in_use
 from app.config import settings
 from app.docker_utils import run_container, get_existing_container, check_container_status, delete_local_directory
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 client = docker.from_env()
 
@@ -15,6 +17,9 @@ router = APIRouter(
     prefix="/agents",
     tags=["agents"]
 )
+
+# Define the limiter for this router
+limiter = Limiter(key_func=get_remote_address)
 
 class Agent(BaseModel):
     name: str
@@ -108,7 +113,8 @@ async def restart_agent(agent: str):
 #! Have to test more
 # TODO: CREATE A TIMEOUT FOR THE BUILDING OF THE IMAGE
 @router.post("/create")
-def create_agent(agent: Agent):
+@limiter.limit("5/minute")  # Apply rate limit: 5 requests per minute per IP
+def create_agent(request: Request, agent: Agent):
     """
     Creates a new agent with the specified name and port.
 

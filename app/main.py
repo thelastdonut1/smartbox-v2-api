@@ -8,7 +8,7 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from app.routers import files, agents
 from app.config import settings
-from app.docker_utils import make_ten_agents
+from app.docker_utils import make_multiple_containers
 
 # Initialize the Limiter
 limiter = Limiter(key_func=get_remote_address)
@@ -36,8 +36,15 @@ logging.basicConfig(level=logging.INFO)
 # Make the agent directory if it does not exist
 settings.agent_dir.mkdir(parents=True, exist_ok=True)  # Create the agent directory if it does not exist
 
-make_ten_agents(agent_name="MC", port=5000, image="mtconnect/agent")
 
+# create multiple containers
+# This checks to see if the mtconnect/agent image is present already on the smartbox and if it is, it does not make 10 agents
+try:
+    if client.images.get("mtconnect/agent"):
+            logging.info(f"The MTconnect agent image already exists. Assuming agents already exist and skipping.")
+except docker.errors.ImageNotFound:
+            logging.info("MTConnect agent image not found. Proceeding with function...")
+            make_multiple_containers(agent_name="MC", image="mtconnect/agent", port=5000)
 
 # Run the FastAPI application
 if __name__ == "__main__":

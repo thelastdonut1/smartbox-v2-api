@@ -5,7 +5,7 @@ import os
 import shutil
 from app.utils import is_port_in_use
 from app.config import settings
-import dotenv
+
 
 
 client = docker.from_env()
@@ -18,7 +18,6 @@ class ContainerError(Exception):
 
 
 root_dir = Path(__file__).parent  # Path to the root directory flask_app
-PORT_RANGE = (5000, 5010)
 
 
 def get_existing_container(name):
@@ -110,49 +109,19 @@ def delete_local_directory(name):
     shutil.rmtree(directory)
 
 
-dotenv_file = dotenv.find_dotenv(filename="app/app/config/.env.development")
-dotenv.load_dotenv(dotenv_file)
 
 # TODO: make a mass create function that will run when the flask app starts up (10 agents)
-def make_ten_agents(image, agent_name, port):
-    startup = initial_startup()
-    logging.info(f"startup env is: {startup}")
-    if startup:
-        logging.info("10 agents already exsist")
-    else:    
-        for i in range(1, 11):
-            try:
-                run_container(image, agent_name + str(i), port + i)
-            except docker.errors.APIError as e:
-                logging.info(f"Container '{agent_name + str(i)}' did not start. Error: {e}.")
-            logging.info(f"Container '{agent_name + str(i)}' started.")
-        os.environ['INITIAL_STARTUP'] = 'TRUE'
-        dotenv.set_key(dotenv_file, 'INITIAL_STARTUP', os.environ["INITIAL_STARTUP"])
-    logging.info(f"The ENV variaable is {os.getenv('INITIAL_STARTUP')}")
+def make_multiple_containers(image, agent_name, port):
+    #Starts creating 10 agents
+    for i in range(1, 11):
+        container_name = f"{agent_name}{i}"
+        try:
+            run_container(image, container_name, port + i)
+        except docker.errors.APIError as e:
+            logging.info(f"Container '{container_name}' did not start. Error: {e}.")
+        logging.info(f"Container '{container_name}' started.")
 
 
-def initial_startup():
-    env = check_env()
-    if env:
-        logging.info("Initial startup has already been complete. Checking for 10 agents")
-        for i in range(1, 11):
-            try:
-                client.containers.get("MC"+ str(i))
-            except docker.errors.NotFound as e:
-                logging.error(f"Error finding agents: {e}")
-        return True
-    else:
-        logging.info("Inital Startup is false, creating 10 agents")
-        return False
-        
-
-def check_env():
-    test = os.getenv("INITIAL_STARTUP")
-    logging.info(f"{test}") 
-    if test == "TRUE":
-        return True
-    else:
-        return False
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 build: 
-  path: /code/smartbox-v2-api
+  path: /mnt/c/smartbox-v2-api
   dockerfile: Dockerfile
-  tag: "smartbox-api-v2:latest"
+  tag: "smartbox-api-v2:1.0.1"
   rm: true
 privileged: true
 ports:

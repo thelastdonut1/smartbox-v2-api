@@ -7,7 +7,7 @@ import docker
 from pydantic import BaseModel
 from app.utils import is_port_in_use
 from app.config import settings
-from app.docker_utils import run_container, get_existing_container, check_container_status, delete_local_directory
+from app.docker_utils import run_container, get_existing_container, check_container_status, delete_container
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
@@ -153,10 +153,11 @@ def delete_agent(agent: str):
     :return: JSON response indicating 'success' or 'failure' with an error message.
     """
     try:
-        container = get_existing_container(agent)
-        container.stop()
-        delete_local_directory(agent)
-        container.remove()
+        delete_container(agent)
+        # container = get_existing_container(agent)
+        # container.stop()
+        # delete_local_directory(agent)
+        # container.remove()
     except Exception as e:
         return JSONResponse(status_code=404, content={"message": f"Agent not found: (Error: {e})"})
     return JSONResponse(status_code=200, content={"message": f"Agent {agent} deleted"})
